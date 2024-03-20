@@ -1,0 +1,72 @@
+<launch>
+    <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]" />
+    <arg name="world_name" default="turtlebot" />
+    <arg name="x_pos" default="0.2" />
+    <arg name="y_pos" default="0.2" />
+    <arg name="z_pos" default="0.0" />
+    <arg name="simulation" default="true" />
+    <arg name="run_script" default="true" />
+    <arg name="amcl" default="false" />
+
+    <group if="$(arg simulation)">
+        <include file="$(find lab4)/launch/world_sim.launch">
+            <arg name="model" value="$(arg model)" />
+            <arg name="x_pos" value="$(arg x_pos)" />
+            <arg name="y_pos" value="$(arg y_pos)" />
+            <arg name="z_pos" value="$(arg z_pos)" />
+            <arg name="world" value="$(arg world_name)" />
+            <arg name="simulation" value="$(arg simulation)" />
+        </include>
+    </group>
+    <!-- rviz -->
+    <!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find lab3)/rviz/rbe3002_lab3.rviz"/> -->
+
+    <!-- gmapping -->
+    <!-- <include file="$(find turtlebot3_navigation)/launch/amcl.launch"/> -->
+    <group unless="$(arg amcl)">
+        <!-- We don't need mapserver if gmapping is running -->
+        <include file="$(find lab4)/launch/gmapping.launch">
+            <arg name="model" value="$(arg model)" />
+            <arg name="slam_methods" value="gmapping" />
+        </include>
+
+            <!-- Our Nodes -->
+        <group if="$(arg run_script)">
+            <!-- <node name="localizer" pkg="lab4" type="localizer.py" output="screen"/> -->
+            <node name="path_follower" pkg="lab4" type="path_follower.py" output="screen" >
+                <param name="amcl" value="$(arg amcl)" />
+            </node>
+            <node name="path_planner" pkg="lab4" type="path_planner.py" output="screen" >
+                <!-- During gmapping we listen for the dynamic map -->
+                <param name="map_type" value="dynamic_map" />
+            </node>
+        </group>
+    </group>
+
+    <!-- We launch just amcl with RVIZ here -->
+    <group if="$(arg amcl)">
+        <include file="$(find turtlebot3_navigation)/launch/amcl.launch" />
+        <arg name="min_particles" value="1000"/>
+        <arg name="laser_model_type" value="beam"/>
+        <!-- Map Server, for after we do gmapping -->
+        <node pkg="map_server" type="map_server" name="map_server"
+            args="$(find lab4)/maps/mymap.yaml" />
+        <node name="rviz" pkg="rviz" type="rviz" args="-d $(find lab4)/rviz/config.rviz" />
+        <include file="$(find turtlebot3_bringup)/launch/turtlebot3_remote.launch">
+            <arg name="model" value="$(arg model)" />
+        </include>
+
+                    <!-- Our Nodes -->
+        <group if="$(arg run_script)">
+            <!-- <node name="localizer" pkg="lab4" type="localizer.py" output="screen"/> -->
+            <node name="path_follower" pkg="lab4" type="path_follower.py" output="screen" >
+                <param name="amcl" value="$(arg amcl)" />
+            </node>
+            <node name="path_planner" pkg="lab4" type="path_planner.py" output="screen" >
+                <!-- If amcl is running we pass in 'static map' instead of dynamic map -->
+                <param name="map_type" value="static_map" />
+            </node>
+        </group>
+    </group>
+
+</launch>

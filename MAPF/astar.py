@@ -19,8 +19,8 @@ def search(grid, start, goal, heuristic):
             break
         for direction in directions:
             newRow, newCol = curRow + direction[0], curCol + direction[1]
-            if 0 <= newRow < rows and 0 <= newCol < cols and not visited[newRow][newCol] and not grid[newRow][newCol]:
-                newCost = cost + 1
+            if 0 <= newRow < rows and 0 <= newCol < cols and not visited[newRow][newCol]:
+                newCost = cost + 1 + grid[newRow][newCol]
                 if newCost < costs[newRow][newCol]:
                     costs[newRow][newCol] = newCost
                     prio = newCost + heuristic((newRow, newCol), goal)

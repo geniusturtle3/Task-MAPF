@@ -286,7 +286,7 @@ class DStar:
             self.repair_replan(x)
             # Get the new path from the current node
             self.get_backpointer_list(x)
-            # Uncomment this part when you have finished the previous part
+            # Uncommentpython -m pip install -U pip this part when you have finished the previous part
             # for visualizing each move and replanning
             
             # Visualize the path in progress

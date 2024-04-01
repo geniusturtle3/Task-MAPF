@@ -38,6 +38,7 @@ class PathFollower():
         if amcl:
             rospy.Subscriber('/clicked_point', PointStamped, self.localize)
             rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, self.calcCovariance)
+            rospy.loginfo("amcl")
         else:
             # we shall use the 2D pose estimate to trigger the automatic measurement
             rospy.Subscriber('/initialpose',
@@ -113,7 +114,7 @@ class PathFollower():
     def execute_plan(self, goal: PoseStamped):
         rospy.loginfo("Requesting the map")
         rospy.wait_for_service("plan_path")
-        tolerance = 0.08
+        tolerance = 0.13
         while self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
             get_plan = rospy.ServiceProxy("plan_path", GetPlan)
 

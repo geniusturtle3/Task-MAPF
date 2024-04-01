@@ -108,7 +108,7 @@ Visualization Manager:
           Value: true
       Name: RobotModel
       Robot Description: robot_description
-      TF Prefix: robot1_tf
+      TF Prefix: robot_1
       Update Interval: 0
       Value: true
       Visual Enabled: true
@@ -218,7 +218,7 @@ Visualization Manager:
           Value: true
       Name: RobotModel
       Robot Description: robot_description
-      TF Prefix: robot2_tf
+      TF Prefix: robot_2
       Update Interval: 0
       Value: true
       Visual Enabled: true
@@ -250,7 +250,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 24.430126190185547
+      Distance: 31.270587921142578
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1

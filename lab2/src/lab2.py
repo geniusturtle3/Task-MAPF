@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-
+from __future__ import annotations
 import rospy
 import math
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped
-from geometry_msgs.msg import Twist
+from std_srvs.srv import Empty
+from nav_msgs.msg import Odometry, Path
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import Twist, PointStamped 
 from tf.transformations import euler_from_quaternion
+import tf
 import math
 from nav_msgs.srv import GetPlan
+import os
+import copy
 
 class Lab2:
 
@@ -17,16 +21,41 @@ class Lab2:
         """
         ### Initialize node, name it 'lab2'
         rospy.init_node('lab2')
+        
+        # rospy.loginfo(self.number)
         ### Tell ROS that this node publishes Twist messages on the '/cmd_vel' topic
-        self.cmd_vel=rospy.Publisher('/cmd_vel',Twist)
+        
         ### Tell ROS that this node subscribes to Odometry messages on the '/odom' topic
         ### When a message is received, call self.update_odometry
-        rospy.Subscriber('/odom',Odometry,self.update_odometry)
         ### Tell ROS that this node subscribes to PoseStamped messages on the '/move_base_simple/goal' topic
         ### When a message is received, call self.go_to
+        name=rospy.get_name()
+        rospy.loginfo(str.split(str.split(name,'/')[1],'_')[1])
+        self.number=int(str.split(str.split(name,'/')[1],'_')[1])
+       
+        self.cmd_vel=rospy.Publisher('/robot_'+str(self.number)+'/cmd_vel',Twist)
+        rospy.Subscriber('/robot_'+str(self.number)+'/odom',Odometry,self.update_odometry)
         rospy.Subscriber('/move_base_simple/goal',PoseStamped,self.execute_plan)
-
+        self.reqCount=0
+        # elif rospy.get_name()=="/robot_2/pathfollow":
+        #     self.cmd_vel=rospy.Publisher('/robot_2/cmd_vel',Twist)
+        #     rospy.Subscriber('/robot_2/odom',Odometry,self.update_odometry)
+        #     rospy.Subscriber('/move_base_simple/goal',PoseStamped,self.execute_plan)
         self.px,self.py,self.ptheta=0,0,0
+
+        self.pxStart, self.pyStart, self.pthetaStart = 0, 0, 0
+
+        self.useOdom = True
+        # a value of 0.45 meters seem to smooth out things while keeping the robot fairly on track
+        self.indexLookahead = 12  # 6 cells lookahead
+        self.lookaheadDistance = self.indexLookahead*0.015  # meters
+        self.maximumVelocity = 0.4  # meters per second
+        self.maximumAngVelocity = 5.5  # rad per second
+        self.turnK=1.97
+        self.maximumAngAccel= math.pi * 0.8
+        self.updateOdom = True
+        self.isLocalized = False
+        self.prevError = 0
 
         
         
@@ -114,26 +143,266 @@ class Lab2:
         self.send_speed(0.0, 0.0) # stop the robot
 
     def execute_plan(self, goal: PoseStamped):
-        rospy.loginfo("Requesting the map")
-        rospy.wait_for_service("plan_path")
-        get_plan=rospy.ServiceProxy("plan_path", GetPlan)
+        self.reqCount+=1
+        print(self.reqCount%2,self.number)
+        if self.reqCount%2==self.number%2:
+            rospy.loginfo("Requesting the map")
+            rospy.wait_for_service("/plan_path")
+            # get_plan=rospy.ServiceProxy("/plan_path", GetPlan)
 
-        # we have to give it start and end in wordl coordinates
-        startPose = PoseStamped()
-        startPose.header.frame_id = "odom"
-        startPose.pose.position.x = self.px
-        startPose.pose.position.y = self.py
+            tolerance = 0.2
+            while self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
+                get_plan = rospy.ServiceProxy("/plan_path", GetPlan)
 
-        planToDrive = get_plan(startPose, goal, 0.001).plan
+                # we have to give it start and end in wordl coordinates
+                startPose = PoseStamped()
+                startPose.header.frame_id = "map"
+                startPose.pose.position.x = self.px
+                startPose.pose.position.y = self.py
+
+                planToDrive: Path = get_plan(startPose, goal, 0.001).plan
+
+                rospy.loginfo("Path received, executing driving instructions")
+
+                # Execute the path        
+                self.pure_pursuit(planToDrive, tolerance=tolerance)
+            rospy.loginfo("Finished driving to goal")
+        # # we have to give it start and end in wordl coordinates
+        # startPose = PoseStamped()
+        # startPose.header.frame_id = "/robot"+str(self.number)+'_tf/odom'
+        # startPose.pose.position.x = self.px
+        # startPose.pose.position.y = self.py
+        # # try:
+        # #     rospy.loginfo(rospy.get_param('/robot_1/pathfollow/robottf'))
+        # # except:
+        # #     pass
+        # # print(rospy.get_namespace)
+        # rospy.loginfo(startPose)
+        # planToDrive = get_plan(startPose, goal, 0.001).plan
         
-        rospy.loginfo("Path received, executing driving instructions")
-        i=0
-        for pose in planToDrive.poses:
-            last=False
-            if i == len(planToDrive.poses)-1:
-                last=True
-            self.go_to(pose,last)
-            i+=1        
+        # rospy.loginfo("Path received, executing driving instructions")
+        # i=0
+        # for pose in planToDrive.poses:
+        #     last=False
+        #     if i == len(planToDrive.poses)-1:
+        #         last=True
+        #     self.go_to(pose,last)
+        #     i+=1        
+
+    def pure_pursuit(self, path: Path, tolerance: float = 0.14, earlyExit: bool = False):
+        """
+        Uses the pure pursuit algorithm to follow a path.
+        :param path [Path] The path to follow.
+        :param tolerance [float] The range of acceptable error for the robot to 
+                         be considered at the final waypoint. Default of 2.5 cm
+        """
+        prevLookaheadIndex = 0
+
+        # if a path is too short for this algorithm, use simpler algorithm
+        if len(path.poses) == 0:
+            return
+        if len(path.poses) < 2:
+            rospy.loginfo(
+                "Path too short for pure pursuit, using simple path follow")
+            self.go_to(path.poses[0])
+            if len(path.poses) > 1:
+                self.go_to(path.poses[1])
+            return
+
+        self.indexLookahead = min(self.indexLookahead, len(path.poses)-1)
+
+        initialHeading = math.atan2(path.poses[self.indexLookahead].pose.position.y - path.poses[0].pose.position.y,
+                                    path.poses[self.indexLookahead].pose.position.x - path.poses[0].pose.position.x)
+        print(f"initial heading {initialHeading} and self theta {self.ptheta}")
+        diff = initialHeading-self.ptheta
+        # only rotate if the difference is large-ish
+        if abs(diff) > 0.1:
+            self.smooth_rotate(initialHeading-self.ptheta,
+                               self.maximumAngVelocity)
+            
+        isDone = False
+    
+        while True:
+            # Calls findLookaheadPoint function to find the desired lookahead
+            #   waypoint and saves it to chosenWaypoint.
+            # prevLookaheadIndex = self.findLookaheadPoint(
+            #     path, prevLookaheadIndex)
+            closestPoint = self.findClosestPoint(path)
+            prevLookaheadIndex = min(self.findClosestPoint(
+                path) + self.indexLookahead, len(path.poses)-1)
+            chosenWaypoint: PoseStamped = path.poses[prevLookaheadIndex]
+
+            # Finds position of waypoint and robot respectively and separates them into X and Y components
+            waypointXPos, waypointYPos = chosenWaypoint.pose.position.x, \
+                chosenWaypoint.pose.position.y    # Waypoint
+
+            # Calculates the angle in which the robot needs to travel, then finds the distance between this
+            #   and the robot heading.
+            angleOfLookaheadVector = math.atan2(
+                (waypointYPos - self.py), (waypointXPos - self.px))
+            angleBetween = angleOfLookaheadVector - self.ptheta
+
+            # Finds the overall distance from the robot to the waypoint, then the horizontal distance between
+            #   the lookahead vector and the waypoint.
+            distToWaypoint = self.pose_distance(
+                (chosenWaypoint.pose.position.x, chosenWaypoint.pose.position.y))
+            horizontalDistToWaypoint = math.sin(angleBetween)*distToWaypoint
+
+            if self.pose_distance((path.poses[closestPoint].pose.position.x, path.poses[closestPoint].pose.position.y)) > 2*tolerance:
+                rospy.logwarn("ERROR: Robot lost path - Emergency Stopping")
+                self.send_speed(0, 0)
+                return
+
+            # This represents the case where the robot is either on the lookahead point (last point)
+            #   or is already at the right heading and doesn't need to curve.
+            if horizontalDistToWaypoint == 0:
+                curvature = 0
+
+            # If the robot needs to curve:
+            else:
+                # Radius of curvature from robot to point.
+                radiusOfCurvature = (distToWaypoint)**2 / \
+                    (2*horizontalDistToWaypoint)
+
+                # Curvature from robot to point.
+                curvature = 1/radiusOfCurvature
+
+            # Constant used to scale overall velocity up or down for tuning.
+            kp = .35
+
+            # Slows robot down around curves.
+            kd = 0.4*(abs(curvature))
+
+            # Calculates desired overall robot velocity
+            error = (distToWaypoint/self.lookaheadDistance) * \
+                self.maximumVelocity
+            # error keeps jumping a bit too much
+
+            errorDiff = error - self.prevError
+            if errorDiff > 0:
+                errorDiff = -0.03
+                # this happens when we jump to a next lookahead point
+                # we just reuse the last error in that case
+            if errorDiff < -0.1:
+                errorDiff = -0.1
+
+            # print(f"KP: {kp*error :2.4f}\t KD: {kd*errorDiff :2.4f} \t C: {curvature:2.4f}")
+            # TODO: Implement smooth acceleration / deceleration
+            linearVelocity = kp*error + kd*errorDiff
+
+            # clamp the velocity to the maximum and minimum
+            if linearVelocity > self.maximumVelocity:
+                linearVelocity = self.maximumVelocity
+
+            if linearVelocity < 0.01:
+                linearVelocity = 0.01
+
+            self.prevError = error
+
+            # Curvature to robot linear and angular velocities.
+            # for velocity of 0.22 the coeff is 1.35
+            angularVelocity = curvature * linearVelocity*self.turnK
+
+            if angularVelocity > self.maximumAngVelocity:
+                angularVelocity = self.maximumAngVelocity
+                linearVelocity = angularVelocity / curvature
+
+            # print(f"Linear velocity: {linearVelocity}, Angular velocity: {angularVelocity}")
+            # print(f"Curvature: {curvature}, Error: {error}")
+
+            self.send_speed(linearVelocity, angularVelocity)
+
+            if earlyExit:
+                # early exit w/o stopping anything after 2 cells
+                # TODO figure out a good early-exit condition
+
+                lookahead = min(120, len(path.poses)-1)
+
+                isDone = self.pose_distance(
+                    (path.poses[lookahead].pose.position.x, path.poses[lookahead].pose.position.y)) < tolerance
+            if not isDone:  # and earlyExit:
+                isDone = self.pose_distance(
+                    (path.poses[-1].pose.position.x, path.poses[-1].pose.position.y)) < tolerance
+            # elif not isDone:
+            #     # Tells the system that the PP loop is done.
+            #     isDone = distToWaypoint < tolerance and chosenWaypoint == path.poses[-1]
+
+            if isDone:
+                # self.send_speed(0, 0)
+                # Stops the robot and breaks the loop.
+
+                self.send_speed(0, 0)
+                return
+
+            self.lastPPseconds = rospy.get_time()
+            self.updateOdom = False
+            # 20Hz is the frequency
+            while not self.updateOdom and (rospy.get_time() - self.lastPPseconds) < 0.25:
+                rospy.sleep(0.005)
+            rospy.sleep(0.005)
+
+    def findLookaheadPoint(self, path: Path, prevLookaheadIndex: int) -> int:
+        poseList = path.poses
+        pointList = [(0, 0)]*len(poseList)
+        for i in range(len(poseList)):
+            pointList[i] = (poseList[i].pose.position.x,
+                            poseList[i].pose.position.y)
+        # Sets current lookahead point to previous for the
+        indexOfLookaheadPoint = prevLookaheadIndex
+        #   start of the next loop.
+        # Initial value of the lookahead point distance is 0.
+        lookaheadPointDist = 0
+
+        # Looks at waypoints from the last lookahead point to the second to last point on the list
+        for i in range(prevLookaheadIndex, len(pointList)):
+            # Finds position of the waypoint currently being
+            pointPosition = pointList[i]
+            #   looked at.
+
+            # Finds distance from robot to waypoint
+            pointDistance = self.pose_distance(pointPosition)
+
+            if pointDistance > lookaheadPointDist and pointDistance < self.lookaheadDistance:
+                # If the distance to the closest waypoint is further than the current lookahead point distance and shorter than the ideal
+                #   lookahead distance, it does the following. Basically, we want to find a waypoint as close to the lookahead distance as
+                #   possible, but will ALWAYS round down if possible.
+                # Sets the index of the lookahead point to i.
+                indexOfLookaheadPoint = i
+                # Sets the distance to the lookahead point distance so we calculate
+                lookaheadPointDist = pointDistance
+                # the wheel velocities based on the target waypoint.
+            # If the distance of the new closest waypointis further than the lookahead distance, do the following.
+            elif pointDistance > lookaheadPointDist:
+                # Sets the lookahead index to be one option before the
+                indexOfLookaheadPoint = i - 1
+                #   current index. (Rounds down.)
+                return indexOfLookaheadPoint
+        # If we make it through the entire list without finding a point that is closer than the lookahead distance,
+        # we set the lookahead point to the last point in the list.
+        return indexOfLookaheadPoint
+
+    def findClosestPoint(self, path: Path) -> int:
+        """
+        Finds closest point for use with Stanley Control
+        :param path [Path] The path to follow.
+        :returns the index of the closest point
+        """
+        closestIndex = 0
+        previousPointDistance = 69420
+        for i in range(len(path.poses)):
+            pointPosition = path.poses[i].pose.position.x, path.poses[i].pose.position.y
+            # robotPosition = (self.px, self.py)
+            pointDistance = self.pose_distance(pointPosition)
+
+            if pointDistance < previousPointDistance:
+                # Iterates until the distance increases, then returns
+                previousPointDistance = pointDistance
+                closestIndex = i
+            else:
+                # Return the index instead of the coordinates so we can get the heading later
+                return closestIndex
+        # If we run out of points, use the last valid one
+        return len(path.poses)-1
 
 
     def go_to(self, msg: PoseStamped, rotEnd=False):
@@ -257,7 +526,7 @@ class Lab2:
         This method is a callback bound to a Subscriber.
         :param msg [Odometry] The current odometry information.
         """
-        ### REQUIRED CREDIT
+        # print("updating odom")
         self.px = msg.pose.pose.position.x
         self.py = msg.pose.pose.position.y
         quat_orig = msg.pose.pose.orientation

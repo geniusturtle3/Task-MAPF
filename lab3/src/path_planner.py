@@ -2,11 +2,13 @@
 from __future__ import annotations
 import math
 import numpy as np
+import cv2
 import copy
 import rospy
 from nav_msgs.srv import GetPlan, GetMap
 from nav_msgs.msg import GridCells, OccupancyGrid, Path
-from geometry_msgs.msg import Point, Pose, PoseStamped
+from geometry_msgs.msg import Point32, Point, Pose, PoseStamped
+from sensor_msgs.msg import PointCloud, ChannelFloat32
 from tf.transformations import euler_from_quaternion
 from priority_queue import PriorityQueue
 
@@ -21,7 +23,6 @@ class PathPlanner:
         """
         Class constructor
         """
-
         # self.cmd_vel = rospy.Publisher('/cmd_vel', Twist)
         # rospy.Subscriber('/odom', Odometry, self.update_odometry)
 
@@ -44,6 +45,9 @@ class PathPlanner:
         ## Sleep to allow roscore to do some housekeeping
         rospy.sleep(1.0)
         rospy.loginfo("Path planner node ready")
+        self.map=self.request_map()
+        self.cspaced=self.calc_cspace(self.map, 1)
+
 
 
 
@@ -252,6 +256,7 @@ class PathPlanner:
         
         rospy.loginfo("Requesting the map")
         rospy.wait_for_service("static_map")
+        rospy.loginfo("got map")
         get_map=rospy.ServiceProxy("static_map",GetMap)
         map=get_map().map
         if map is None:
@@ -260,7 +265,7 @@ class PathPlanner:
         return map
 
 
-    def calc_cspace(self, mapdata: OccupancyGrid, padding: int=2) -> OccupancyGrid:
+    def calc_cspace(self, mapdata: OccupancyGrid, paddingVal: float = 1) -> OccupancyGrid:
         """
         Calculates the C-Space, i.e., makes the obstacles in the map thicker.
         Publishes the list of cells that were added to the original map.
@@ -269,46 +274,58 @@ class PathPlanner:
         :return        [OccupancyGrid] The C-Space.
         """
         rospy.loginfo("Calculating C-Space")
-        ## Go through each cell in the occupancy grid
-        ## Inflate the obstacles where necessary
-        cellsToInflate = []
-        # Convert existing map data to a list so we can modify it
-        newMapData = list(mapdata.data)
 
-        for i in range(len(mapdata.data)):
-            # Save all non-walkable cells to inflate later
-            if not PathPlanner.is_cell_walkable(mapdata, (i % mapdata.info.width, int(i / mapdata.info.width))):
-                cellsToInflate.append(i)
+        # Convert existing map data to a NumPy array for easier manipulation
+        map_array = np.array(mapdata.data, dtype=np.int8).reshape(
+            (mapdata.info.height, mapdata.info.width))
 
-        for cell in cellsToInflate:
-            # Convert cell to x, y coordinates so we can grab neighbors slightly easier
-            x = cell % mapdata.info.width
-            y = int(cell / mapdata.info.width)
-            newMapData[cell] = 0
-            # Grab all open neighbors within padding distance and set them to 100
-            for open_cells in PathPlanner.neighbors_within_dist(mapdata, (x, y), padding):
-                newMapData[PathPlanner.grid_to_index(mapdata, open_cells)] = 100
+        # get the robot radius, convert to cell count
+        # add 25% padding to the radius
+        robot_radius_cells = math.ceil(
+            (0.210 * 0.5*paddingVal) / mapdata.info.resolution)
+        print(
+            f"The robot's radius is {robot_radius_cells} map cells wide (Resolution: {mapdata.info.resolution})")
+        additional_clearance_cells = 0  # Adjust as needed for additional clearance
+        padding = robot_radius_cells + additional_clearance_cells
+
+        # Find obstacles in the map and dilate them
+        # obstacles = map_array < 255 # Remove unknown cells
+        # Assuming obstacles are represented by values greater than 50
+        obstacles = map_array > 50
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * padding + 1, 2 * padding + 1))
+        dilated_obstacles = cv2.dilate(obstacles.astype(np.uint8), kernel)
+
+        # Set the inflated obstacles to 100 in the map data
+        map_array[dilated_obstacles > 0] = 100
+        map_array[obstacles > 0] = 0
+        # Convert map array back to a flat list
+        new_map_data = map_array.flatten().tolist()
         
+        newmapdata = OccupancyGrid()
+        newmapdata.header = mapdata.header
+        newmapdata.info = mapdata.info
         # Convert list back to tuple so we can publish it
-        mapdata.data = tuple(newMapData)
+        newmapdata.data = tuple(new_map_data)
 
-        ## Create a GridCells message and publish it
+        # Create a GridCells message and publish it
         cspace = GridCells()
         cspace.header.frame_id = "map"
         cspace.cell_width = mapdata.info.resolution
         cspace.cell_height = mapdata.info.resolution
         cspace.cells = []
 
-        for i in range(len(mapdata.data)):
-            if mapdata.data[i] == 100:
+        for i in range(len(newmapdata.data)):
+            if newmapdata.data[i] == 100:
                 # Publish only the inflated cells
-                cspace.cells.append(PathPlanner.grid_to_world(mapdata, (i % mapdata.info.width, int(i / mapdata.info.width))))
+                cspace.cells.append(self.grid_to_world(
+                    newmapdata, (i % newmapdata.info.width, int(i / newmapdata.info.width))))
 
         rospy.loginfo("Publishing C-Space")
         self.cspace_pub.publish(cspace)
-    
-        ## Return the C-space
-        return mapdata
+
+        # Return the C-space
+        return newmapdata
 
     
     def a_star(self, mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:
@@ -454,19 +471,22 @@ class PathPlanner:
         Internally uses A* to plan the optimal path.
         :param req 
         """
+        rospy.loginfo("Starting planning")
+        # print(self.map)
         ## Request the map
         ## In case of error, return an empty path
         mapdata = PathPlanner.request_map()
+        rospy.loginfo("Map Req")
         if mapdata is None:
             return Path()
         ## Calculate the C-space and publish it
-        cspacedata = self.calc_cspace(mapdata, 1)
+        cspacedata = self.calc_cspace(mapdata, .95)
         ## Execute A*
         start = PathPlanner.world_to_grid(cspacedata, msg.start.pose.position)
         goal  = PathPlanner.world_to_grid(cspacedata, msg.goal.pose.position)
         path  = self.a_star(cspacedata, start, goal)
         ## Optimize waypoints
-        waypoints = PathPlanner.optimize_path(path)
+        waypoints = path#PathPlanner.optimize_path(path)
         pathpoints=[self.grid_to_world(cspacedata,start)]
         for point in waypoints:
             pathpoints.append(self.grid_to_world(cspacedata,point))
@@ -514,25 +534,27 @@ class PathPlanner:
         """
         Runs the node until Ctrl-C is pressed.
         """
-        mapp = PathPlanner.request_map()
-        cspaced=self.calc_cspace(mapp, 1)
-        # path=self.optimize_path(self.sam_a_star(cspaced,(3,3),(11,9)))
+        self.map = PathPlanner.request_map()
+        self.cspaced=self.calc_cspace(self.map, .95)
+        # print(self.map)
+        # rospy.loginfo(rospy.get_name()+" Hello")
+        # path=self.optimize_path(self.a_star(self.cspaced,(3,3),(11,9)))
         # print(path)
         # pathpoints=[]
         # for point in path:
         #     print(point)
-        #     pathpoints.append(self.grid_to_world(cspaced,point))
+        #     pathpoints.append(self.grid_to_world(self.cspaced,point))
         
         # path_msg=GridCells()
-        # path_msg.cell_height=cspaced.info.resolution
-        # path_msg.cell_width=cspaced.info.resolution
+        # path_msg.cell_height=self.cspaced.info.resolution
+        # path_msg.cell_width=self.cspaced.info.resolution
         # path_msg.header.frame_id="map"
         # path_msg.cells=pathpoints
         # self.a_star_pub.publish(path_msg)
-        # print()
+        
         
 
-        # # self.a_star_pub()
+        # self.a_star_pub()
         rospy.spin()
 
 

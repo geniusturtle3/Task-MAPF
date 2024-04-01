@@ -13,7 +13,8 @@
 
   <env name="GAZEBO_MODEL_PATH" value="$(find lab4)/models:$(optenv GAZEBO_MODEL_PATH"/>
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="world_name" value="$(find lab4)/worlds/$(arg world).world"/>
+    <!-- <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/turtlebot3_world.world"/> -->
+    <arg name="world_name" value="$(find lab4)/worlds/turtlebot.world"/>
     <arg name="paused" value="false"/>
     <arg name="use_sim_time" value="$(arg simulation)"/>
     <arg name="gui" value="true"/>

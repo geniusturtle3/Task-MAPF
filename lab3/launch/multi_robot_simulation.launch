@@ -24,9 +24,14 @@
   <include file="$(find lab3)/launch/robots.launch"/>
   <node name="rviz" pkg="rviz" type="rviz" args="-d $(find lab3)/rviz/multibottest.rviz"/>
   <node pkg="map_server" type="map_server" name="map_server" args="$(find lab4)/maps/mymap.yaml"/>
+  
   <!-- <node pkg="tf" type="static_transform_publisher" name="map_to_odom1" args="0 0 0 0 0 0 /map robot1_tf/odom 100"/>
   <node pkg="tf" type="static_transform_publisher" name="map_to_odom2" args="0 0 0 0 0 0 /map robot2_tf/odom 100"/> -->
   <node name="lab3" pkg="lab3" type="path_planner.py" output="screen">
       <param name="robot" value="robot1" />
-  </node> 
+  </node>
+  <!-- <node name="masta" pkg="lab3" type="global_manager.py" output="screen">
+  </node>   -->
+  
+  
 </launch>

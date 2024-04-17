@@ -264,8 +264,8 @@ class PathPlanner:
             return None
         return map
 
-
-    def calc_cspace(self, mapdata: OccupancyGrid, paddingVal: float = 1) -> OccupancyGrid:
+    @staticmethod
+    def calc_cspace(mapdata: OccupancyGrid, paddingVal: float = 1) -> OccupancyGrid:
         """
         Calculates the C-Space, i.e., makes the obstacles in the map thicker.
         Publishes the list of cells that were added to the original map.
@@ -318,17 +318,17 @@ class PathPlanner:
         for i in range(len(newmapdata.data)):
             if newmapdata.data[i] == 100:
                 # Publish only the inflated cells
-                cspace.cells.append(self.grid_to_world(
+                cspace.cells.append(PathPlanner.grid_to_world(
                     newmapdata, (i % newmapdata.info.width, int(i / newmapdata.info.width))))
 
-        rospy.loginfo("Publishing C-Space")
-        self.cspace_pub.publish(cspace)
+        # rospy.loginfo("Publishing C-Space")
+        # PathPlanner.cspace_pub.publish(cspace)
 
         # Return the C-space
         return newmapdata
 
-    
-    def a_star(self, mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:
+    @staticmethod
+    def a_star( mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:
         """
         Calculates the Optimal path using the A* algorithm.
         Publishes the list of cells that were added to the original map.
@@ -341,11 +341,11 @@ class PathPlanner:
 
         # Check if start and goal are walkable
 
-        if(not self.is_cell_walkable(mapdata,start)):
+        if(not PathPlanner.is_cell_walkable(mapdata,start)):
             # print(mapdata.data[self.grid_to_index(mapdata,start)])
             rospy.loginfo('start blocked')
 
-        if(not self.is_cell_walkable(mapdata,goal)):
+        if(not PathPlanner.is_cell_walkable(mapdata,goal)):
             # print(mapdata.data[self.grid_to_index(mapdata,goal)])
             rospy.loginfo('goal blocked')
 
@@ -356,7 +356,7 @@ class PathPlanner:
         # dictionary of all the explored points keyed by their coordinates tuple
         # TODO: Replace with an array based on the index, and store their previous point
         explored={} 
-        q.put((start,None,0),self.euclidean_distance(start,goal))
+        q.put((start,None,0),PathPlanner.euclidean_distance(start,goal))
 
         while not q.empty():
             element = q.get()
@@ -366,9 +366,9 @@ class PathPlanner:
 
             if cords==goal:
                 # Once we've hit the goal, reconstruct the path and then return it
-                return self.reconstructPath(explored,start,goal)
+                return PathPlanner.reconstructPath(explored,start,goal)
             
-            neighbors=self.neighbors_of_8(mapdata,cords)
+            neighbors=PathPlanner.neighbors_of_8(mapdata,cords)
             
             # print('\n-----')
             # print(cords,"\n",neighbors)
@@ -381,14 +381,14 @@ class PathPlanner:
                 else: #Cardinal Neighbors
                     gfactor=1
                 if explored.get(neighbor) is None or explored.get(neighbor)[2]>g+gfactor:
-                    f=g+gfactor+self.euclidean_distance(neighbor,goal)
+                    f=g+gfactor+PathPlanner.euclidean_distance(neighbor,goal)
                     # print((neighbor,cords,g+1),f)
                     q.put((neighbor,cords,g+gfactor),f)
         rospy.loginfo('Could not reach goal')
         return []
 
-            
-    def reconstructPath(self, explored: dict, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:   
+    @staticmethod
+    def reconstructPath(explored: dict, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:   
         """
         A helper function to reconstruct the path from the explored dictionary
         :param explored [dict] The dictionary of explored nodes
@@ -535,7 +535,22 @@ class PathPlanner:
         Runs the node until Ctrl-C is pressed.
         """
         self.map = PathPlanner.request_map()
-        self.cspaced=self.calc_cspace(self.map, .95)
+        self.cspaced=self.calc_cspace(self.map, 1.25)
+        # # Create a GridCells message and publish it
+        # cspace = GridCells()
+        # cspace.header.frame_id = "map"
+        # cspace.cell_width = self.cspaced.info.resolution
+        # cspace.cell_height = self.cspaced.info.resolution
+        # cspace.cells = []
+
+        # for i in range(len(self.cspaced.data)):
+        #     if self.cspaced.data[i] == 100:
+        #         # Publish only the inflated cells
+        #         cspace.cells.append(PathPlanner.grid_to_world(
+        #             self.cspaced, (i % self.cspaced.info.width, int(i / self.cspaced.info.width))))
+                
+        # rospy.loginfo("Publishing C-Space")
+        # PathPlanner.cspace_pub.publish(cspace)
         # print(self.map)
         # rospy.loginfo(rospy.get_name()+" Hello")
         # path=self.optimize_path(self.a_star(self.cspaced,(3,3),(11,9)))

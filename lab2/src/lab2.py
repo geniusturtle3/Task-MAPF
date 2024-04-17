@@ -36,6 +36,7 @@ class Lab2:
         self.cmd_vel=rospy.Publisher('/robot_'+str(self.number)+'/cmd_vel',Twist)
         rospy.Subscriber('/robot_'+str(self.number)+'/odom',Odometry,self.update_odometry)
         rospy.Subscriber('/move_base_simple/goal',PoseStamped,self.execute_plan)
+        rospy.Subscriber('/robot_'+str(self.number)+'/goal'+str(self.number),PoseStamped,self.execute_plan)
         self.reqCount=0
         # elif rospy.get_name()=="/robot_2/pathfollow":
         #     self.cmd_vel=rospy.Publisher('/robot_2/cmd_vel',Twist)
@@ -145,7 +146,7 @@ class Lab2:
     def execute_plan(self, goal: PoseStamped):
         self.reqCount+=1
         print(self.reqCount%2,self.number)
-        if self.reqCount%2==self.number%2:
+        if True:#self.reqCount%2==self.number%2:
             rospy.loginfo("Requesting the map")
             rospy.wait_for_service("/plan_path")
             # get_plan=rospy.ServiceProxy("/plan_path", GetPlan)

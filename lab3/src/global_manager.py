@@ -49,7 +49,7 @@ class GobalManager:
         # print("updating odom")
         # print(msg.header.frame_id)
         frame_id=msg.header.frame_id
-        rospy.loginfo(str.split(str.split(frame_id,'/')[0],'_')[1])
+        # rospy.loginfo(str.split(str.split(frame_id,'/')[0],'_')[1])
         number=int(str.split(str.split(frame_id,'/')[0],'_')[1])
         self.odomHeader=msg.header
         self.odomPoint=msg.pose.pose
@@ -69,7 +69,7 @@ class GobalManager:
             pnt=mapdata.data[i]
             if pnt<100 and pnt>-1:
                 opencells.append(i)
-        print(opencells)
+        # print(opencells)
         goalPoint=[]
         while len(goalPoint)==0:
             tempPoint=random.choice(opencells)
@@ -98,10 +98,10 @@ class GobalManager:
         Runs the node until Ctrl-C is pressed.
         """
         self.map = PathPlanner.request_map()
-        self.cspaced=PathPlanner.calc_cspace(self.map, 1.25)
-        print("starting to choose")
+        self.cspaced=PathPlanner.calc_cspace(self.map, 1.5)
+        print("starting to choose 1")
         self.chooseGoal(1,self.cspaced)
-        print("starting to choose")
+        print("starting to choose 2")
         self.chooseGoal(2,self.cspaced)
         rospy.spin()
 

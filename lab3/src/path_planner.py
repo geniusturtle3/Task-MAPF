@@ -540,15 +540,15 @@ class PathPlanner:
         # print(self.map)
         ## Request the map
         ## In case of error, return an empty path
-        mapdata = PathPlanner.request_map()
+        mapdata = self.map#PathPlanner.request_map()
         
         rospy.loginfo("Map Req")
         if mapdata is None:
             return Path()
         ## Calculate the C-space and publish it
-        cspacedata = self.calc_cspace(mapdata, .95)
+        cspacedata = self.cspaced#self.calc_cspace(mapdata, .95)
         ## Calculate the Gradient Space
-        gradSpace= PathPlanner.calc_gradspace(mapdata)
+        gradSpace= self.gradSpace#PathPlanner.calc_gradspace(mapdata)
         ## Execute A*
         start = PathPlanner.world_to_grid(cspacedata, msg.start.pose.position)
         goal  = PathPlanner.world_to_grid(cspacedata, msg.goal.pose.position)
@@ -604,6 +604,7 @@ class PathPlanner:
         """
         self.map = PathPlanner.request_map()
         self.cspaced=self.calc_cspace(self.map, 1.25)
+        self.gradSpace=self.calc_gradspace(self.map)
         # # Create a GridCells message and publish it
         # cspace = GridCells()
         # cspace.header.frame_id = "map"

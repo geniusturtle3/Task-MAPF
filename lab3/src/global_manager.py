@@ -31,20 +31,32 @@ class GobalManager:
         self.cspaced=PathPlanner.calc_cspace(self.map, 1.5)
         self.gradSpace=PathPlanner.calc_gradspace(self.map)
 
-        self.goal1=rospy.Publisher('/robot_1/goal1',PoseStamped)
+        self.goal1=rospy.Publisher('/robot_1/goal1',PoseStamped,queue_size=10)
         self.pos1=rospy.Subscriber('/robot_1/odom',Odometry,self.update_odometry)
-
-        self.goal2=rospy.Publisher('/robot_2/goal2',PoseStamped)
-        self.pos2=rospy.Subscriber('/robot_2/odom',Odometry,self.update_odometry)
-        
         self.status1=rospy.Subscriber('/robot_1/status',String,self.toMove)
+
+        self.goal2=rospy.Publisher('/robot_2/goal2',PoseStamped,queue_size=10)
+        self.pos2=rospy.Subscriber('/robot_2/odom',Odometry,self.update_odometry)
         self.status2=rospy.Subscriber('/robot_2/status',String,self.toMove)
 
-        self.goals=[self.goal1,self.goal2]
+        self.goal3=rospy.Publisher('/robot_3/goal3',PoseStamped,queue_size=10)
+        self.pos3=rospy.Subscriber('/robot_3/odom',Odometry,self.update_odometry)
+        self.status3=rospy.Subscriber('/robot_3/status',String,self.toMove)
+        
+        self.goal4=rospy.Publisher('/robot_4/goal4',PoseStamped,queue_size=10)
+        self.pos4=rospy.Subscriber('/robot_4/odom',Odometry,self.update_odometry)
+        self.status4=rospy.Subscriber('/robot_4/status',String,self.toMove)
+        
+        self.goal5=rospy.Publisher('/robot_5/goal5',PoseStamped,queue_size=10)
+        self.pos5=rospy.Subscriber('/robot_5/odom',Odometry,self.update_odometry)
+        self.status5=rospy.Subscriber('/robot_5/status',String,self.toMove)
+
+
+        self.goals=[self.goal1,self.goal2,self.goal3,self.goal4,self.goal5]
         self.pos=[self.pos1,self.pos2]
 
-        self.px=[0,0]
-        self.py=[0,0]
+        self.px=[0,0,0,0,0]
+        self.py=[0,0,0,0,0]
         
         
 
@@ -81,6 +93,7 @@ class GobalManager:
         goalPoint=[]
         while len(goalPoint)==0:
             tempPoint=random.choice(opencells)
+            rospy.loginfo(str(robot)+" testing "+str(tempPoint))
             gridPoint=PathPlanner.index_to_grid(mapdata,tempPoint)
             path=PathPlanner.a_star(mapdata,start,gridPoint,self.gradSpace)
             if len(path)>0:

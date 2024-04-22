@@ -11,7 +11,7 @@
 
     <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 /map $(arg robottf)/odom 100"/>
 
-    <node name="pathfollow" pkg="lab2" type="lab2.py" output="screen">
+    <node name="pathfollow" pkg="task-mapf" type="lab2.py" output="screen">
         <param name="robottf" value="$(arg robottf)"/>
     </node>
     <!-- <node name="$(arg robot_name)pathplan" pkg="lab3" type="path_planner.py" output="screen"/> -->

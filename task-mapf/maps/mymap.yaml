@@ -1,4 +1,4 @@
-image: /home/smarkwick/catkin_ws/src/Task-MAPF/lab4/maps/mymap.pgm
+image: task-mapf/maps/mymap.pgm
 resolution: 0.015000
 origin: [-12.585000, -12.585000, 0.000000]
 negate: 0

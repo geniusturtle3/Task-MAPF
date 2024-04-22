@@ -5,7 +5,7 @@
   <!-- BEGIN ROBOT 1-->
   <group ns="robot_1">
     <param name="tf_prefix" value="robot_1" />
-    <include file="$(find lab3)/launch/one_robot.launch" >
+    <include file="$(find task-mapf)/launch/one_robot.launch" >
       <arg name="init_pose" value="-x .5 -y 1.5 -z 0" />
       <arg name="robot_name"  value="Robot1" />
       <arg name="robottf" value="robot_1"/>
@@ -15,7 +15,7 @@
   <!-- BEGIN ROBOT 2-->
   <group ns="robot_2">
     <param name="tf_prefix" value="robot_2" />
-    <include file="$(find lab3)/launch/one_robot.launch" >
+    <include file="$(find task-mapf)/launch/one_robot.launch" >
       <arg name="init_pose" value="-x 1.5 -y .5 -z 0" />
       <arg name="robot_name"  value="Robot2" />
       <arg name="robottf" value="robot_2"/>
@@ -27,7 +27,7 @@
   <!-- BEGIN ROBOT 3-->
   <group ns="robot_3">
     <param name="tf_prefix" value="robot_3" />
-    <include file="$(find lab3)/launch/one_robot.launch" >
+    <include file="$(find task-mapf)/launch/one_robot.launch" >
       <arg name="init_pose" value="-x 1.5 -y -.5 -z 0" />
       <arg name="robot_name"  value="Robot3" />
       <arg name="robottf" value="robot_3"/>
@@ -37,7 +37,7 @@
   <!-- BEGIN ROBOT 4-->
   <group ns="robot_4">
     <param name="tf_prefix" value="robot_4" />
-    <include file="$(find lab3)/launch/one_robot.launch" >
+    <include file="$(find task-mapf)/launch/one_robot.launch" >
       <arg name="init_pose" value="-x -.5 -y 1.5 -z 0" />
       <arg name="robot_name"  value="Robot4" />
       <arg name="robottf" value="robot_4"/>

@@ -3,6 +3,7 @@ from __future__ import annotations
 import rospy
 import math
 from std_srvs.srv import Empty
+from std_msgs.msg import String
 from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from geometry_msgs.msg import Twist, PointStamped 
@@ -38,6 +39,11 @@ class Lab2:
         rospy.Subscriber('/move_base_simple/goal',PoseStamped,self.execute_plan)
         rospy.Subscriber('/robot_'+str(self.number)+'/goal'+str(self.number),PoseStamped,self.execute_plan)
         self.reqCount=0
+
+        self.statusPub=rospy.Publisher('/robot_'+str(self.number)+'/status',String)
+        rospy.Subscriber('/initialpose',
+                         PoseWithCovarianceStamped, self.send_status)
+
         # elif rospy.get_name()=="/robot_2/pathfollow":
         #     self.cmd_vel=rospy.Publisher('/robot_2/cmd_vel',Twist)
         #     rospy.Subscriber('/robot_2/odom',Odometry,self.update_odometry)
@@ -57,13 +63,19 @@ class Lab2:
         self.updateOdom = True
         self.isLocalized = False
         self.prevError = 0
-
-        
+        # msg=String()
+        # msg.data="awaiting_"+str(self.number)
+        # self.statusPub.publish(msg)
         
 
         # pass # delete this when you implement your code
 
 
+    def send_status(self,msg):
+        msg=String()
+        msg.data="awaiting_"+str(self.number)
+        rospy.loginfo(msg.data)
+        self.statusPub.publish(msg)
 
     def send_speed(self, linear_speed: float, angular_speed: float):
         """
@@ -153,6 +165,9 @@ class Lab2:
 
             tolerance = 0.2
             while self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
+                msg=String()
+                msg.data="going_"+str(self.number)
+                self.statusPub.publish(msg)
                 get_plan = rospy.ServiceProxy("/plan_path", GetPlan)
 
                 # we have to give it start and end in wordl coordinates
@@ -168,6 +183,9 @@ class Lab2:
                 # Execute the path        
                 self.pure_pursuit(planToDrive, tolerance=tolerance)
             rospy.loginfo("Finished driving to goal")
+            msg=String()
+            msg.data="awaiting_"+str(self.number)
+            self.statusPub.publish(msg)
         # # we have to give it start and end in wordl coordinates
         # startPose = PoseStamped()
         # startPose.header.frame_id = "/robot"+str(self.number)+'_tf/odom'
@@ -406,120 +424,6 @@ class Lab2:
         return len(path.poses)-1
 
 
-    def go_to(self, msg: PoseStamped, rotEnd=False):
-        """
-        Attains a given pose by using the three step rotate-drive-rotate method. 
-        This method is a callback bound to a Subscriber.
-        :param msg [PoseStamped] The target pose.
-        """
-        ###Rot Drv Rot 
-        #using the rotate-drive-rotate method here
-        turn_speed = 3.3
-        wait_time = 0.05
-        drive_speed = 0.25
-        #extract the final pose(x, y, theta) from msg
-        goal_x = msg.pose.position.x
-        goal_y = msg.pose.position.y
-        
-        #calculate the rotation
-        angle_to_rotate = math.atan2(goal_y - self.py, goal_x - self.px) - self.ptheta
-        self.smooth_rotate(angle_to_rotate, turn_speed)
-        rospy.sleep(wait_time)
-
-        #calculate the pythagorean distance to drive
-        distance_to_drive = ((goal_x - self.px)**2 + (goal_y - self.py)**2)**0.5
-        self.smooth_drive(distance_to_drive, drive_speed)
-        
-        if rotEnd:
-            rospy.sleep(wait_time)
-            
-            #calculate the angle to rotate to align with the goal
-            quat_RAW = msg.pose.orientation
-            (roll, pitch, yaw) = euler_from_quaternion([quat_RAW.x, quat_RAW.y, quat_RAW.z, quat_RAW.w])
-            goal_theta = yaw
-            angle_to_rotate_goal = goal_theta - self.ptheta
-            self.smooth_rotate(angle_to_rotate_goal, turn_speed)
-
-    def go_to_ICC(self, msg: PoseStamped):
-        """
-        Attains a given pose by using arc curvature. 
-        Used https://rossum.sourceforge.net/papers/CalculationsForRobotics/CirclePath.htm for reference.
-        This method is a callback bound to a Subscriber.
-        :param msg [PoseStamped] The target pose.
-        """
-        init_pose = (self.px, self.py, self.ptheta)
-        target_pose = (msg.pose.position.x, msg.pose.position.y, msg.pose.orientation.z)
-        
-
-        # Distance in angle between robot heading and straight line to target
-        delta_theta = math.atan2(target_pose[1]-init_pose[1], target_pose[0]-init_pose[0]) - init_pose[2]
-        # Radius of arc that intersects current and final position, accounting for initial heading
-        arc_radius = math.sqrt((target_pose[0]-init_pose[0])**2 + (target_pose[1]-init_pose[1])**2) / (2 * math.sin(delta_theta))
-
-        tolerance = 0.05
-        vel = 0.1
-        max_vel = 0.2
-        max_accel = 0.05
-        update_time = 0.05
-        is_decelerating = False
-        
-        print(f"Going from {init_pose} to {target_pose}; Arc radius: {arc_radius}")
-        while self.pose_distance(target_pose) > tolerance:
-
-            # Handle acceleration and deceleration the same way as in smooth_drive
-            if not is_decelerating:
-                if vel < max_vel:
-                    vel += max_accel * update_time
-                
-                distance_to_switch = (vel)**2/(2*max_accel) * 1.07
-                # distance remaining < distance to switch
-                if (self.pose_distance(target_pose)) < distance_to_switch:
-                    is_decelerating = True
-            
-            elif is_decelerating and vel > 0.005:
-                vel -= max_accel * update_time
-
-            # Angular velocity is the ratio of linear velocity to arc radius
-            ang_vel = vel / arc_radius
-            # Debug print statement
-            # print(f"Vel: {vel}, Ang Vel: {ang_vel}")
-            self.send_speed(vel, ang_vel)
-            rospy.sleep(0.05)
-        self.rotate(target_pose[2]-self.ptheta, 0.1)
-
-    def go_to_2002(self, msg: PoseStamped, rotEnd=False):
-        """
-        Attains a given pose by using the three step rotate-drive-rotate method. 
-        This method is a callback bound to a Subscriber.
-        :param msg [PoseStamped] The target pose.
-        """
-
-        ### 2002 Method Not usued
-        kpdis=.3
-        kpang=.6
-        eightTenPi=.8*math.pi
-        twopi=2*math.pi
-        
-        while(abs(msg.pose.position.x-self.px)+abs(msg.pose.position.y-self.py)>.05):
-            print('drive2')
-            disError=math.sqrt(math.pow(msg.pose.position.x-self.px,2)+math.pow(msg.pose.position.y-self.py,2))
-            angError=math.atan2(msg.pose.position.y-self.py,msg.pose.position.x-self.px)-self.ptheta
-            # angError=((yaw-self.pth%twopi)%twopi+math.pi)%(2*math.pi)-math.pi
-            if angError>eightTenPi:
-                angError-=twopi
-            elif angError<-eightTenPi:
-                angError+=twopi
-            # print(self.px,self.py,disError,angError*180/math.pi)
-            dspeed,aspeed=disError*kpdis,angError*kpang
-            self.send_speed(dspeed,aspeed)
-            if abs (aspeed)>1:
-                aspeed=1
-            if dspeed>.2:
-                dspeed=.2
-            rospy.sleep(.01)
-        if rotEnd:
-            (roll,pitch,yaw)=euler_from_quaternion([msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z,msg.pose.orientation.w])
-            self.smooth_rotate(yaw-self.ptheta,.3)   
              
     def update_odometry(self, msg: Odometry):
         """
@@ -645,6 +549,7 @@ class Lab2:
 
 
     def run(self):
+        
         # Just needs to spin to keep the node alive - go_to is a callback bound to a Subscriber
         rospy.spin()
         

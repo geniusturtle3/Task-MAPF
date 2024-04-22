@@ -328,7 +328,49 @@ class PathPlanner:
         return newmapdata
 
     @staticmethod
-    def a_star( mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:
+    def calc_gradspace(mapdata: OccupancyGrid, padding: int = 2) -> OccupancyGrid:
+        """
+        Calculates the C-Space with a gradient indicating the distance from obstacles.
+        :param mapdata [OccupancyGrid] The map data.
+        :param padding [int]           The number of cells around the obstacles.
+        :return        [OccupancyGrid] The C-Space with a distance gradient.
+        """
+        rospy.loginfo("Calculating C-Space with Gradient")
+
+        # Convert existing map data to a NumPy array for easier manipulation
+        map_array = np.array(mapdata.data, dtype=np.uint8).reshape(
+            (mapdata.info.height, mapdata.info.width))
+
+        # Create a binary mask indicating obstacle cells
+        # Assuming obstacles are represented by values less than 50
+        obstacle_mask = map_array < 50
+
+        # Calculate the distance transform
+        distance_transform = cv2.distanceTransform(
+            obstacle_mask.astype(np.uint8), cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
+
+        # Normalize the distance transform to a range between 0 and 100 (adjust as needed)
+        max_distance = np.max(distance_transform)
+        normalized_distance = (distance_transform / max_distance) * 100
+
+        # Set the inflated obstacles to the normalized distance values in the map data
+        # normalized_distance[obstacle_mask]
+        map_array[obstacle_mask] = distance_transform[obstacle_mask]
+
+        # Convert map array back to a flat list
+        new_map_data = map_array.flatten().tolist()
+
+        newmapdata = OccupancyGrid()
+        newmapdata.header = mapdata.header
+        newmapdata.info = mapdata.info
+        # Convert list back to tuple so we can publish it
+        newmapdata.data = tuple(new_map_data)
+        # self.grad_pub.publish(mapdata)
+        # Return the C-space with gradient
+        return newmapdata
+
+    @staticmethod
+    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid) -> list[tuple[int, int]]:
         """
         Calculates the Optimal path using the A* algorithm.
         Publishes the list of cells that were added to the original map.
@@ -337,53 +379,76 @@ class PathPlanner:
         :param goal [int]           The target grid location to pathfind to.
         :return        [list[tuple(int, int)]] The Optimal Path from start to goal.
         """
-        rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
+        rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" %
+                      (start[0], start[1], goal[0], goal[1]))
 
         # Check if start and goal are walkable
 
-        if(not PathPlanner.is_cell_walkable(mapdata,start)):
+        if (not PathPlanner.is_cell_walkable(mapdata, start)):
             # print(mapdata.data[self.grid_to_index(mapdata,start)])
             rospy.loginfo('start blocked')
 
-        if(not PathPlanner.is_cell_walkable(mapdata,goal)):
+        if (not PathPlanner.is_cell_walkable(mapdata, goal)):
             # print(mapdata.data[self.grid_to_index(mapdata,goal)])
             rospy.loginfo('goal blocked')
 
-        #Priority queue for the algorithm
+        # Priority queue for the algorithm
         q = PriorityQueue()
         # element ((Cords),(Prev),g)
 
         # dictionary of all the explored points keyed by their coordinates tuple
         # TODO: Replace with an array based on the index, and store their previous point
-        explored={} 
-        q.put((start,None,0),PathPlanner.euclidean_distance(start,goal))
-
+        explored = {}
+        exppoints = []
+        wvpoint = []
+        checkFat=gradSpace!=None
+        q.put((start, None, 0), PathPlanner.euclidean_distance(start, goal))
         while not q.empty():
             element = q.get()
             cords = element[0]
-            g = element[2] #cost sof far at this element
+            prev = element[1]
+            if cords == start:
+                prev = cords
+            heading = math.atan2(cords[1]-prev[1], cords[0]-prev[0])
+            g = element[2]  # cost sof far at this element
             explored[cords] = element
+            exppoints.append(cords)
 
-            if cords==goal:
+            if cords == goal:
                 # Once we've hit the goal, reconstruct the path and then return it
-                return PathPlanner.reconstructPath(explored,start,goal)
-            
-            neighbors=PathPlanner.neighbors_of_8(mapdata,cords)
-            
-            # print('\n-----')
-            # print(cords,"\n",neighbors)
-            
+                return PathPlanner.reconstructPath(explored, start, goal)
+
+            neighbors = PathPlanner.neighbors_of_8(mapdata, cords)
+
             for i in range(len(neighbors)):
-                neighbor=neighbors[i]
+                neighbor = neighbors[i]
                 # print(neighbor,neighbors)
-                if i<4:#Oridinal Neighbors
-                    gfactor=1.4
-                else: #Cardinal Neighbors
-                    gfactor=1
-                if explored.get(neighbor) is None or explored.get(neighbor)[2]>g+gfactor:
-                    f=g+gfactor+PathPlanner.euclidean_distance(neighbor,goal)
+                manhatdis = abs(neighbor[0]-cords[0])+abs(neighbor[1]-cords[1])
+                if manhatdis > 1:  # Oridinal Neighbors
+                    gfactor = 1.4
+                else:  # Cardinal Neighbors
+                    gfactor = 1
+
+                newHeading = math.atan2(neighbor[1]-cords[1], neighbor[0]-cords[0])
+                turnAngle = math.fmod(math.fmod(newHeading-heading, math.pi*2)+math.pi*2, math.pi*2)
+                turningFactor = 180/math.pi*turnAngle*.01
+                cspaceFactor = 0
+                if checkFat:
+                    dis = gradSpace.data[PathPlanner.grid_to_index(gradSpace, neighbor)]
+                    
+                    if dis < 15:
+                        cspaceFactor = (gfactor*(16-dis)**2)*.5
+                    elif dis < 20:
+                        cspaceFactor = gfactor*(20-dis)*.05
+    
+
+                # print(gfactor)
+                if explored.get(neighbor) is None or explored.get(neighbor)[2] > g+gfactor+cspaceFactor:
+                    f = g+gfactor + \
+                        PathPlanner.euclidean_distance(neighbor, goal) + cspaceFactor + turningFactor
                     # print((neighbor,cords,g+1),f)
-                    q.put((neighbor,cords,g+gfactor),f)
+                    q.put((neighbor, cords, g+gfactor+cspaceFactor+turningFactor), f)
+
         rospy.loginfo('Could not reach goal')
         return []
 
@@ -476,15 +541,18 @@ class PathPlanner:
         ## Request the map
         ## In case of error, return an empty path
         mapdata = PathPlanner.request_map()
+        
         rospy.loginfo("Map Req")
         if mapdata is None:
             return Path()
         ## Calculate the C-space and publish it
         cspacedata = self.calc_cspace(mapdata, .95)
+        ## Calculate the Gradient Space
+        gradSpace= PathPlanner.calc_gradspace(mapdata)
         ## Execute A*
         start = PathPlanner.world_to_grid(cspacedata, msg.start.pose.position)
         goal  = PathPlanner.world_to_grid(cspacedata, msg.goal.pose.position)
-        path  = self.a_star(cspacedata, start, goal)
+        path  = self.a_star(cspacedata, start, goal,gradSpace)
         ## Optimize waypoints
         waypoints = path#PathPlanner.optimize_path(path)
         pathpoints=[self.grid_to_world(cspacedata,start)]

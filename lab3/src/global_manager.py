@@ -3,6 +3,7 @@ from __future__ import annotations
 import rospy
 import math
 from std_srvs.srv import Empty
+from std_msgs.msg import String
 from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from geometry_msgs.msg import Twist, PointStamped 
@@ -26,12 +27,19 @@ class GobalManager:
 
         rospy.init_node("global_manager")
 
+        self.map = PathPlanner.request_map()
+        self.cspaced=PathPlanner.calc_cspace(self.map, 1.5)
+        self.gradSpace=PathPlanner.calc_gradspace(self.map)
+
         self.goal1=rospy.Publisher('/robot_1/goal1',PoseStamped)
         self.pos1=rospy.Subscriber('/robot_1/odom',Odometry,self.update_odometry)
 
         self.goal2=rospy.Publisher('/robot_2/goal2',PoseStamped)
         self.pos2=rospy.Subscriber('/robot_2/odom',Odometry,self.update_odometry)
         
+        self.status1=rospy.Subscriber('/robot_1/status',String,self.toMove)
+        self.status2=rospy.Subscriber('/robot_2/status',String,self.toMove)
+
         self.goals=[self.goal1,self.goal2]
         self.pos=[self.pos1,self.pos2]
 
@@ -74,7 +82,7 @@ class GobalManager:
         while len(goalPoint)==0:
             tempPoint=random.choice(opencells)
             gridPoint=PathPlanner.index_to_grid(mapdata,tempPoint)
-            path=PathPlanner.a_star(mapdata,start,gridPoint)
+            path=PathPlanner.a_star(mapdata,start,gridPoint,self.gradSpace)
             if len(path)>0:
                 goalPoint=gridPoint
         
@@ -90,19 +98,25 @@ class GobalManager:
         self.goals[robot-1].publish(path_msg)
         rospy.loginfo("Done calculating frontier path")
 
-
+    def toMove(self,msg):
+        rospy.loginfo(msg.data)
+        splitstr=msg.data.split("_")
+        status=splitstr[0]
+        robot=int(splitstr[1])
+        rospy.loginfo(robot)
+        if status=="awaiting":
+            self.chooseGoal(robot,self.cspaced)
 
 
     def run(self):
         """
         Runs the node until Ctrl-C is pressed.
         """
-        self.map = PathPlanner.request_map()
-        self.cspaced=PathPlanner.calc_cspace(self.map, 1.5)
-        print("starting to choose 1")
-        self.chooseGoal(1,self.cspaced)
-        print("starting to choose 2")
-        self.chooseGoal(2,self.cspaced)
+        
+        # print("starting to choose 1")
+        # self.chooseGoal(1,self.cspaced)
+        # print("starting to choose 2")
+        # self.chooseGoal(2,self.cspaced)
         rospy.spin()
 
 

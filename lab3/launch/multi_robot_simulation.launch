@@ -30,8 +30,8 @@
   <node name="lab3" pkg="lab3" type="path_planner.py" output="screen">
       <param name="robot" value="robot1" />
   </node>
-  <!-- <node name="masta" pkg="lab3" type="global_manager.py" output="screen">
-  </node>   -->
+  <node name="manager" pkg="lab3" type="global_manager.py" output="screen">
+  </node>  
   
   
 </launch>

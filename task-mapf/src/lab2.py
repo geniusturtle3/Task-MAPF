@@ -464,6 +464,8 @@ class Lab2:
             #     dist_traveled = 2*math.pi - dist_traveled
             #print(dist_traveled*180/math.pi)
             rospy.sleep(update_time)
+            # if self.number==1:
+                # print(dist_traveled*180/math.pi)
 
         self.send_speed(0.0, 0.0) # stop the robot
 

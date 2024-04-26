@@ -39,7 +39,7 @@ class Lab2:
         rospy.Subscriber('/move_base_simple/goal',PoseStamped,self.execute_plan)
         rospy.Subscriber('/robot_'+str(self.number)+'/goal'+str(self.number),PoseStamped,self.execute_plan)
         self.reqCount=0
-
+        rospy.Service('/robot_'+str(self.number)+"/req_odom",Odometry,self.getOdom)
         self.statusPub=rospy.Publisher('/robot_'+str(self.number)+'/status',Odometry)
         rospy.Subscriber('/initialpose',
                          PoseWithCovarianceStamped, self.send_status)
@@ -71,6 +71,8 @@ class Lab2:
 
         # pass # delete this when you implement your code
 
+    def getOdom(self):
+        return self.prevOdom
 
     def send_status(self,msg):
         msg=self.prevOdom
@@ -484,7 +486,7 @@ class Lab2:
         update_time = 0.05 # [s]
         initial_pose = (self.px, self.py, self.ptheta)
 
-        max_accel = 0.25    # [rad/s^2]
+        max_accel = self.maximumAngAccel    # [rad/s^2]
         current_speed = 0.0 # [rad/s]
         is_decelerating = False
 

@@ -31,32 +31,53 @@ class GobalManager:
         self.cspaced=PathPlanner.calc_cspace(self.map, 1.5)
         self.gradSpace=PathPlanner.calc_gradspace(self.map)
 
-        self.goal1=rospy.Publisher('/robot_1/goal1',PoseStamped,queue_size=10)
-        # self.pos1=rospy.Subscriber('/robot_1/odom',Odometry,self.update_odometry)
-        self.status1=rospy.Subscriber('/robot_1/status',Odometry,self.toMove)
+        self.a_star_pub = rospy.Publisher("/a_star", GridCells, queue_size=10)
+        self.path_pub = rospy.Publisher("/apath", Path, queue_size=10)
+        self.cspace_pub = rospy.Publisher("/path_planner/cspace", GridCells, queue_size=10)
 
-        self.goal2=rospy.Publisher('/robot_2/goal2',PoseStamped,queue_size=10)
-        # self.pos2=rospy.Subscriber('/robot_2/odom',Odometry,self.update_odometry)
-        self.status2=rospy.Subscriber('/robot_2/status',Odometry,self.toMove)
+        self.pathPub1=rospy.Publisher('/robot_1/path1',Path,queue_size=10)
+        self.status1=rospy.Subscriber('/robot_1/newGoal',Odometry,self.chooseGoal)
+        self.replan1=rospy.Subscriber('/robot_1/replan',Odometry,self.sameGoal)
 
-        self.goal3=rospy.Publisher('/robot_3/goal3',PoseStamped,queue_size=10)
-        # self.pos3=rospy.Subscriber('/robot_3/odom',Odometry,self.update_odometry)
-        self.status3=rospy.Subscriber('/robot_3/status',Odometry,self.toMove)
+        self.pathPub2=rospy.Publisher('/robot_2/path2',Path,queue_size=10)
+        self.status2=rospy.Subscriber('/robot_2/newGoal',Odometry,self.chooseGoal)
+        self.replan2=rospy.Subscriber('/robot_2/replan',Odometry,self.sameGoal)
+
+        self.pathPub3=rospy.Publisher('/robot_3/path3',Path,queue_size=10)
+        self.status3=rospy.Subscriber('/robot_3/newGoal',Odometry,self.chooseGoal)
+        self.replan3=rospy.Subscriber('/robot_3/replan',Odometry,self.sameGoal)
         
-        self.goal4=rospy.Publisher('/robot_4/goal4',PoseStamped,queue_size=10)
-        # self.pos4=rospy.Subscriber('/robot_4/odom',Odometry,self.update_odometry)
-        self.status4=rospy.Subscriber('/robot_4/status',Odometry,self.toMove)
+        self.pathPub4=rospy.Publisher('/robot_4/path4',Path,queue_size=10)
+        self.status4=rospy.Subscriber('/robot_4/newGoal',Odometry,self.chooseGoal)
+        self.replan4=rospy.Subscriber('/robot_4/replan',Odometry,self.sameGoal)
         
-        self.goal5=rospy.Publisher('/robot_5/goal5',PoseStamped,queue_size=10)
-        # self.pos5=rospy.Subscriber('/robot_5/odom',Odometry,self.update_odometry)
-        self.status5=rospy.Subscriber('/robot_5/status',Odometry,self.toMove)
+        self.pathPub5=rospy.Publisher('/robot_5/path5',Path,queue_size=10)
+        self.status5=rospy.Subscriber('/robot_5/newGoal',Odometry,self.chooseGoal)
+        self.replan5=rospy.Subscriber('/robot_5/replan',Odometry,self.sameGoal)
 
 
-        self.goals=[self.goal1,self.goal2,self.goal3,self.goal4,self.goal5]
-        # self.pos=[self.pos1,self.pos2]
+        self.goals=[self.pathPub1,self.pathPub2,self.pathPub3,self.pathPub4,self.pathPub5]
 
         self.px=[0,0,0,0,0]
         self.py=[0,0,0,0,0]
+        self.goalPoints=[[0,0],[0,0],[0,0],[0,0],[0,0]]
+
+        rospy.loginfo("publishing cspace")
+        cspace = GridCells()
+        cspace.header.frame_id = "map"
+        cspace.cell_width = self.map.info.resolution
+        cspace.cell_height = self.map.info.resolution
+        cspace.cells = []
+
+        for i in range(len(self.cspaced.data)):
+            if self.cspaced.data[i] == 100:
+                # Publish only the inflated cells
+                cspace.cells.append(PathPlanner.grid_to_world(
+                    self.cspaced, (i % self.cspaced.info.width, int(i / self.cspaced.info.width))))
+
+        self.cspace_pub.publish(cspace)
+        
+
         
         
 
@@ -80,7 +101,9 @@ class GobalManager:
         self.ptheta = yaw
         return number
 
-    def chooseGoal(self, robot: int, mapdata: OccupancyGrid):
+    def chooseGoal(self, msg):
+        robot=self.update_odometry(msg)
+        mapdata=self.cspaced
         pos=Point()
         pos.x=self.px[robot-1]
         pos.y=self.py[robot-1]
@@ -94,27 +117,40 @@ class GobalManager:
         goalPoint=[]
         while len(goalPoint)==0:
             tempPoint=random.choice(opencells)
-            rospy.loginfo(str(robot)+" testing "+str(tempPoint))
+            # rospy.loginfo(str(robot)+" testing "+str(tempPoint))
             gridPoint=PathPlanner.index_to_grid(mapdata,tempPoint)
             path=PathPlanner.a_star(mapdata,start,gridPoint,self.gradSpace)
             if len(path)>0:
                 goalPoint=gridPoint
+                self.goalPoints[robot-1]=goalPoint
         
 
-        path_msg = PoseStamped()
-        worldpoint=PathPlanner.grid_to_world(mapdata,goalPoint)
+        # path_msg = PoseStamped()
+        # worldpoint=PathPlanner.grid_to_world(mapdata,goalPoint)
 
-        path_msg.header=self.odomHeader
-        path_msg.header.frame_id="map"
-        path_msg.pose.position=worldpoint
-        
-        
+        # path_msg.header=self.odomHeader
+        # path_msg.header.frame_id="map"
+        # path_msg.pose.position=worldpoint
+        path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.goals[robot-1].publish(path_msg)
-        rospy.loginfo("Done calculating frontier path")
+        self.path_pub.publish(path_msg)
 
-    def toMove(self,msg):
+        rospy.loginfo("Done choosing goal for robot "+str(robot))
+
+    def sameGoal(self,msg):
+        mapdata=self.cspaced
         robot=self.update_odometry(msg)
-        self.chooseGoal(robot,self.cspaced)
+        pos=Point()
+        pos.x=self.px[robot-1]
+        pos.y=self.py[robot-1]
+        start=PathPlanner.world_to_grid(mapdata,pos)
+        path=PathPlanner.a_star(mapdata,start,self.goalPoints[robot-1],self.gradSpace)
+        path_msg=PathPlanner.path_to_message(self.cspaced,path)
+        self.goals[robot-1].publish(path_msg)
+        self.path_pub.publish(path_msg)
+
+    
+
 
 
     def run(self):

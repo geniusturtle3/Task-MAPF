@@ -21,7 +21,7 @@ from nav_msgs.srv import GetPlan
 from path_planner import PathPlanner
 
 
-class GobalManager:
+class GlobalManager:
     def __init__(self) -> None:
         "Constructor"
 
@@ -112,7 +112,7 @@ class GobalManager:
             tempPoint=random.choice(opencells)
             # rospy.loginfo(str(robot)+" testing "+str(tempPoint))
             gridPoint=PathPlanner.index_to_grid(mapdata,tempPoint)
-            path=PathPlanner.a_star(mapdata,start,gridPoint,self.gradSpace)
+            path=PathPlanner.a_star(mapdata,start,gridPoint)
             if len(path)>0:
                 goalPoint=gridPoint
                 self.goalPoints[robot-1]=goalPoint
@@ -139,7 +139,7 @@ class GobalManager:
         pos.x=self.px[robot-1]
         pos.y=self.py[robot-1]
         start=PathPlanner.world_to_grid(mapdata,pos)
-        path=PathPlanner.a_star(mapdata,start,self.goalPoints[robot-1],self.gradSpace)
+        path=PathPlanner.a_star(mapdata,start,self.goalPoints[robot-1])
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.goals[robot-1].publish(path_msg)
         self.path_pub.publish(path_msg)
@@ -175,4 +175,4 @@ class GobalManager:
 
         
 if __name__ == '__main__':
-    GobalManager().run()
+    GlobalManager().run()

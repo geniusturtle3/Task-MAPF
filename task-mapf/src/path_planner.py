@@ -370,7 +370,7 @@ class PathPlanner:
         return newmapdata
 
     @staticmethod
-    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid) -> list[tuple[int, int]]:
+    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid=None) -> list[tuple[int, int]]:
         """
         Calculates the Optimal path using the A* algorithm.
         Publishes the list of cells that were added to the original map.

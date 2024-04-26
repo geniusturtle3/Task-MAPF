@@ -51,8 +51,8 @@ class Lab2:
 
         self.useOdom = True
         # a value of 0.45 meters seem to smooth out things while keeping the robot fairly on track
-        self.indexLookahead = 12  # 6 cells lookahead
-        self.lookaheadDistance = self.indexLookahead*0.015  # meters
+        self.indexLookahead = 6  # 6 cells lookahead
+        self.lookaheadDistance = self.indexLookahead*0.025  # meters
         self.maximumVelocity = 0.4  # meters per second
         self.maximumAngVelocity = 5.5  # rad per second
         self.turnK=1.97
@@ -116,18 +116,21 @@ class Lab2:
             # Execute the path        
             self.pure_pursuit(planToDrive, tolerance=tolerance)
             #lost path replanning
-            goal=planToDrive.poses[-1]
+            if len(planToDrive.poses)>0:
+                goal=planToDrive.poses[-1]
 
-            if self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
-                #if we fail to reach goal have global manager send another path to same goal
-                rospy.loginfo("Robot "+str(self.number)+" failed driving to goal")
-                msg=self.prevOdom
-                self.replanPub.publish(msg)
-            else:
-                #if reach send to global manager to send a new path with new goal
-                rospy.loginfo("Robot "+str(self.number)+" finished driving to goal")
-                msg=self.prevOdom
-                self.newGoalPub.publish(msg)
+
+                if self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
+                    #if we fail to reach goal have global manager send another path to same goal
+                    rospy.loginfo("Robot "+str(self.number)+" failed driving to goal")
+                    msg=self.prevOdom
+                    self.replanPub.publish(msg)
+                else:
+                    #if reach send to global manager to send a new path with new goal
+                    rospy.loginfo("Robot "+str(self.number)+" finished driving to goal")
+                    msg=self.prevOdom
+                    self.newGoalPub.publish(msg)
+            else: self.send_status()
               
 
     def pure_pursuit(self, path: Path, tolerance: float = 0.14, earlyExit: bool = False):

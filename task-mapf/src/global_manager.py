@@ -32,28 +32,28 @@ class GobalManager:
         self.gradSpace=PathPlanner.calc_gradspace(self.map)
 
         self.goal1=rospy.Publisher('/robot_1/goal1',PoseStamped,queue_size=10)
-        self.pos1=rospy.Subscriber('/robot_1/odom',Odometry,self.update_odometry)
-        self.status1=rospy.Subscriber('/robot_1/status',String,self.toMove)
+        # self.pos1=rospy.Subscriber('/robot_1/odom',Odometry,self.update_odometry)
+        self.status1=rospy.Subscriber('/robot_1/status',Odometry,self.toMove)
 
         self.goal2=rospy.Publisher('/robot_2/goal2',PoseStamped,queue_size=10)
-        self.pos2=rospy.Subscriber('/robot_2/odom',Odometry,self.update_odometry)
-        self.status2=rospy.Subscriber('/robot_2/status',String,self.toMove)
+        # self.pos2=rospy.Subscriber('/robot_2/odom',Odometry,self.update_odometry)
+        self.status2=rospy.Subscriber('/robot_2/status',Odometry,self.toMove)
 
         self.goal3=rospy.Publisher('/robot_3/goal3',PoseStamped,queue_size=10)
-        self.pos3=rospy.Subscriber('/robot_3/odom',Odometry,self.update_odometry)
-        self.status3=rospy.Subscriber('/robot_3/status',String,self.toMove)
+        # self.pos3=rospy.Subscriber('/robot_3/odom',Odometry,self.update_odometry)
+        self.status3=rospy.Subscriber('/robot_3/status',Odometry,self.toMove)
         
         self.goal4=rospy.Publisher('/robot_4/goal4',PoseStamped,queue_size=10)
-        self.pos4=rospy.Subscriber('/robot_4/odom',Odometry,self.update_odometry)
-        self.status4=rospy.Subscriber('/robot_4/status',String,self.toMove)
+        # self.pos4=rospy.Subscriber('/robot_4/odom',Odometry,self.update_odometry)
+        self.status4=rospy.Subscriber('/robot_4/status',Odometry,self.toMove)
         
         self.goal5=rospy.Publisher('/robot_5/goal5',PoseStamped,queue_size=10)
-        self.pos5=rospy.Subscriber('/robot_5/odom',Odometry,self.update_odometry)
-        self.status5=rospy.Subscriber('/robot_5/status',String,self.toMove)
+        # self.pos5=rospy.Subscriber('/robot_5/odom',Odometry,self.update_odometry)
+        self.status5=rospy.Subscriber('/robot_5/status',Odometry,self.toMove)
 
 
         self.goals=[self.goal1,self.goal2,self.goal3,self.goal4,self.goal5]
-        self.pos=[self.pos1,self.pos2]
+        # self.pos=[self.pos1,self.pos2]
 
         self.px=[0,0,0,0,0]
         self.py=[0,0,0,0,0]
@@ -78,6 +78,7 @@ class GobalManager:
         self.quat_orig = msg.pose.pose.orientation
         (roll, pitch, yaw) = euler_from_quaternion([self.quat_orig.x, self.quat_orig.y, self.quat_orig.z, self.quat_orig.w])
         self.ptheta = yaw
+        return number
 
     def chooseGoal(self, robot: int, mapdata: OccupancyGrid):
         pos=Point()
@@ -112,13 +113,8 @@ class GobalManager:
         rospy.loginfo("Done calculating frontier path")
 
     def toMove(self,msg):
-        rospy.loginfo(msg.data)
-        splitstr=msg.data.split("_")
-        status=splitstr[0]
-        robot=int(splitstr[1])
-        rospy.loginfo(robot)
-        if status=="awaiting":
-            self.chooseGoal(robot,self.cspaced)
+        robot=self.update_odometry(msg)
+        self.chooseGoal(robot,self.cspaced)
 
 
     def run(self):

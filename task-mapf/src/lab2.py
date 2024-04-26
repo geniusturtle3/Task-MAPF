@@ -22,7 +22,6 @@ class Lab2:
         """
         ### Initialize node, name it 'lab2'
         rospy.init_node('lab2')
-        
         # rospy.loginfo(self.number)
         ### Tell ROS that this node publishes Twist messages on the '/cmd_vel' topic
         
@@ -31,24 +30,21 @@ class Lab2:
         ### Tell ROS that this node subscribes to PoseStamped messages on the '/move_base_simple/goal' topic
         ### When a message is received, call self.go_to
         name=rospy.get_name()
-        rospy.loginfo(str.split(str.split(name,'/')[1],'_')[1])
+        # rospy.loginfo(str.split(str.split(name,'/')[1],'_')[1])
         self.number=int(str.split(str.split(name,'/')[1],'_')[1])
        
         self.cmd_vel=rospy.Publisher('/robot_'+str(self.number)+'/cmd_vel',Twist)
         rospy.Subscriber('/robot_'+str(self.number)+'/odom',Odometry,self.update_odometry)
-        rospy.Subscriber('/move_base_simple/goal',PoseStamped,self.execute_plan)
-        rospy.Subscriber('/robot_'+str(self.number)+'/goal'+str(self.number),PoseStamped,self.execute_plan)
+        rospy.Subscriber('/move_base_simple/goal',PoseStamped,self.executeToGoal)
+        rospy.Subscriber('/robot_'+str(self.number)+'/path'+str(self.number),Path,self.execute_plan)
         self.reqCount=0
-
-        # rospy.Service('/robot_'+str(self.number)+"/req_odom",Odometry,self.getOdom)
-        self.statusPub=rospy.Publisher('/robot_'+str(self.number)+'/status',Odometry)
+        self.newGoalPub=rospy.Publisher('/robot_'+str(self.number)+'/newGoal',Odometry,queue_size=10)
+        self.replanPub=rospy.Publisher('/robot_'+str(self.number)+'/replan',Odometry,queue_size=10)
         rospy.Subscriber('/initialpose',
                          PoseWithCovarianceStamped, self.send_status)
+        
+        
 
-        # elif rospy.get_name()=="/robot_2/pathfollow":
-        #     self.cmd_vel=rospy.Publisher('/robot_2/cmd_vel',Twist)
-        #     rospy.Subscriber('/robot_2/odom',Odometry,self.update_odometry)
-        #     rospy.Subscriber('/move_base_simple/goal',PoseStamped,self.execute_plan)
         self.px,self.py,self.ptheta=0,0,0
 
         self.pxStart, self.pyStart, self.pthetaStart = 0, 0, 0
@@ -67,17 +63,16 @@ class Lab2:
         self.prevOdom=None
         # msg=String()
         # msg.data="awaiting_"+str(self.number)
-        # self.statusPub.publish(msg)
+        # self.newGoalPub.publish(msg)
         
 
         # pass # delete this when you implement your code
 
-    def getOdom(self):
-        return self.prevOdom
+    
 
     def send_status(self,msg):
         msg=self.prevOdom
-        self.statusPub.publish(msg)
+        self.newGoalPub.publish(msg)
 
     def send_speed(self, linear_speed: float, angular_speed: float):
         """
@@ -98,114 +93,42 @@ class Lab2:
         ### Publish the message
         self.cmd_vel.publish(msg_cmd_vel)
         
-    
-        
-    def drive(self, distance: float, linear_speed: float):
-        """
-        Drives the robot in a straight line.
-        :param distance     [float] [m]   The distance to cover.
-        :param linear_speed [float] [m/s] The forward linear speed.
-        """
-        if distance < 0:
-            linear_speed = -linear_speed
-            distance = -distance
-        pose_init = (self.px, self.py)
-        drive_tolerance = 0.01
-        while self.pose_distance(pose_init) < abs(distance - drive_tolerance):
-            self.send_speed(linear_speed, 0.0)
-            rospy.sleep(0.05)
-        self.send_speed(0.0, 0.0)
-    
-    def rotate(self, angle: float, angular_speed: float):
-        stop_error = 0.005   
-        update_time = 0.033 # [s]
-        initial_pose = (self.px, self.py, self.ptheta)
+    def executeToGoal(self, goal: PoseStamped):
+        rospy.loginfo("Requesting the map")
+        rospy.wait_for_service("/plan_path")
+        get_plan=rospy.ServiceProxy("/plan_path", GetPlan)
+        # we have to give it start and end in wordl coordinates
+        startPose = PoseStamped()
+        startPose.header.frame_id = "map"
+        startPose.pose.position.x = self.px
+        startPose.pose.position.y = self.py
+        path = get_plan(startPose, goal, 0.001).plan
+        self.execute_plan(path)
 
-        
-        # take care of large angle
-        while angle >= 2*math.pi:
-            angle -= 2*math.pi
-        while angle <= -2*math.pi:
-            angle += 2*math.pi
-
-        #make all turns smaller than pi
-        if angle > math.pi:
-            angle = angle - 2*math.pi
-        elif angle < -math.pi:
-            angle = angle + 2*math.pi
-        
-        # take care of the sign of the angle in real world
-        if angle < 0:
-            max_accel = -max_accel  # this effectively swaps the speed sign
-            # aspeed = -aspeed
-
-        #print(angle*180/math.pi)
-        angle = abs(angle)   
-
-        # take care of the sign of the angle
-        if angle < 0:
-            aspeed = -aspeed   
-
-        dist_traveled = 0
-        while(dist_traveled < (angle - stop_error)):               
-            self.send_speed(0.0, aspeed)
-            dist_traveled = abs((self.ptheta - initial_pose[2]))
-            if(dist_traveled > math.pi):
-                dist_traveled = 2*math.pi - dist_traveled
-            #print(dist_traveled*180/math.pi)
-            rospy.sleep(update_time)
-        
-        self.send_speed(0.0, 0.0) # stop the robot
-
-    def execute_plan(self, goal: PoseStamped):
+    def execute_plan(self, msg:Path):
         self.reqCount+=1
         print(self.reqCount%2,self.number)
         if True:#self.reqCount%2==self.number%2:
-            rospy.loginfo("Requesting the map")
-            rospy.wait_for_service("/plan_path")
-            # get_plan=rospy.ServiceProxy("/plan_path", GetPlan)
-
             tolerance = 0.2
-            while self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
-                
-                get_plan = rospy.ServiceProxy("/plan_path", GetPlan)
+            planToDrive=msg
+            rospy.loginfo("Path received, executing driving instructions")
 
-                # we have to give it start and end in wordl coordinates
-                startPose = PoseStamped()
-                startPose.header.frame_id = "map"
-                startPose.pose.position.x = self.px
-                startPose.pose.position.y = self.py
+            # Execute the path        
+            self.pure_pursuit(planToDrive, tolerance=tolerance)
+            #lost path replanning
+            goal=planToDrive.poses[-1]
 
-                planToDrive: Path = get_plan(startPose, goal, 0.001).plan
-
-                rospy.loginfo("Path received, executing driving instructions")
-
-                # Execute the path        
-                self.pure_pursuit(planToDrive, tolerance=tolerance)
-            rospy.loginfo("Finished driving to goal")
-            msg=self.prevOdom
-            self.statusPub.publish(msg)
-        # # we have to give it start and end in wordl coordinates
-        # startPose = PoseStamped()
-        # startPose.header.frame_id = "/robot"+str(self.number)+'_tf/odom'
-        # startPose.pose.position.x = self.px
-        # startPose.pose.position.y = self.py
-        # # try:
-        # #     rospy.loginfo(rospy.get_param('/robot_1/pathfollow/robottf'))
-        # # except:
-        # #     pass
-        # # print(rospy.get_namespace)
-        # rospy.loginfo(startPose)
-        # planToDrive = get_plan(startPose, goal, 0.001).plan
-        
-        # rospy.loginfo("Path received, executing driving instructions")
-        # i=0
-        # for pose in planToDrive.poses:
-        #     last=False
-        #     if i == len(planToDrive.poses)-1:
-        #         last=True
-        #     self.go_to(pose,last)
-        #     i+=1        
+            if self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
+                #if we fail to reach goal have global manager send another path to same goal
+                rospy.loginfo("Robot "+str(self.number)+" failed driving to goal")
+                msg=self.prevOdom
+                self.replanPub.publish(msg)
+            else:
+                #if reach send to global manager to send a new path with new goal
+                rospy.loginfo("Robot "+str(self.number)+" finished driving to goal")
+                msg=self.prevOdom
+                self.newGoalPub.publish(msg)
+              
 
     def pure_pursuit(self, path: Path, tolerance: float = 0.14, earlyExit: bool = False):
         """
@@ -231,15 +154,18 @@ class Lab2:
 
         initialHeading = math.atan2(path.poses[self.indexLookahead].pose.position.y - path.poses[0].pose.position.y,
                                     path.poses[self.indexLookahead].pose.position.x - path.poses[0].pose.position.x)
-        print(f"initial heading {initialHeading} and self theta {self.ptheta}")
+        # print(f"initial heading {initialHeading} and self theta {self.ptheta}")
         diff = initialHeading-self.ptheta
         # only rotate if the difference is large-ish
-        if abs(diff) > 0.1:
+        # rospy.loginfo("Rotating to initial heading "+str(self.number))
+        while abs(diff) > 0.2:
             self.smooth_rotate(initialHeading-self.ptheta,
                                self.maximumAngVelocity)
-            
+            diff = initialHeading-self.ptheta
+            # rospy.loginfo(str(diff))
+        startTime=rospy.get_time()
         isDone = False
-    
+        # rospy.loginfo("Starting Pure Pursuit "+str(self.number))
         while True:
             # Calls findLookaheadPoint function to find the desired lookahead
             #   waypoint and saves it to chosenWaypoint.
@@ -354,10 +280,13 @@ class Lab2:
 
             self.lastPPseconds = rospy.get_time()
             self.updateOdom = False
-            # 20Hz is the frequency
+            
+            if rospy.get_time()-startTime>30:
+                return
             while not self.updateOdom and (rospy.get_time() - self.lastPPseconds) < 0.25:
                 rospy.sleep(0.005)
             rospy.sleep(0.005)
+
 
     def findLookaheadPoint(self, path: Path, prevLookaheadIndex: int) -> int:
         poseList = path.poses
@@ -482,7 +411,7 @@ class Lab2:
         :param angle         [float] [rad]   The distance to cover.
         :param angular_speed [float] [rad/s] The angular speed.
         """
-        stop_error = 0.005   
+        stop_error = 0.01   
         update_time = 0.05 # [s]
         initial_pose = (self.px, self.py, self.ptheta)
 
@@ -531,8 +460,8 @@ class Lab2:
 
             self.send_speed(0.0,current_speed)
             dist_traveled = abs((self.ptheta - initial_pose[2]))
-            if(dist_traveled > math.pi):
-                dist_traveled = 2*math.pi - dist_traveled
+            # if(dist_traveled > math.pi):
+            #     dist_traveled = 2*math.pi - dist_traveled
             #print(dist_traveled*180/math.pi)
             rospy.sleep(update_time)
 

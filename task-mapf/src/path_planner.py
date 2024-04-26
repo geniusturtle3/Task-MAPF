@@ -379,8 +379,8 @@ class PathPlanner:
         :param goal [int]           The target grid location to pathfind to.
         :return        [list[tuple(int, int)]] The Optimal Path from start to goal.
         """
-        rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" %
-                      (start[0], start[1], goal[0], goal[1]))
+        # rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" %
+        #               (start[0], start[1], goal[0], goal[1]))
 
         # Check if start and goal are walkable
 
@@ -510,13 +510,14 @@ class PathPlanner:
         rospy.loginfo(f"Returning optimized path: {path}")
         return path
 
-    def path_to_message(self, mapdata: OccupancyGrid, path: [[int, int]]) -> Path:
+    @staticmethod
+    def path_to_message(mapdata: OccupancyGrid, path: [[int, int]]) -> Path:
         """
         Takes a path on the grid and returns a Path message.
         :param path [[(int,int)]] The path on the grid (a list of tuples)
         :return     [Path]        A Path message (the coordinates are expressed in the world)
         """
-        rospy.loginfo("Returning a Path message")
+        # rospy.loginfo("Returning a Path message")
         path_msg = Path()
         path_msg.header.frame_id = "map"
         path_msg.poses = []
@@ -566,7 +567,7 @@ class PathPlanner:
         path_msg.cells=pathpoints
         self.a_star_pub.publish(path_msg)
         ## Return a Path message
-        pthmsg=self.path_to_message(cspacedata, waypoints)
+        pthmsg=PathPlanner.path_to_message(cspacedata, waypoints)
         self.path_pub.publish(pthmsg)
         return pthmsg
 

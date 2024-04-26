@@ -14,6 +14,7 @@
     <node name="pathfollow" pkg="task-mapf" type="lab2.py" output="screen">
         <param name="robottf" value="$(arg robottf)"/>
     </node>
-    <!-- <node name="$(arg robot_name)pathplan" pkg="lab3" type="path_planner.py" output="screen"/> -->
+    <node name="posreqer" pkg="task-mapf" type="posreqer.py" output="screen"/>
+    
     
 </launch>

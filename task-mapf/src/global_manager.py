@@ -31,36 +31,27 @@ class GobalManager:
         self.cspaced=PathPlanner.calc_cspace(self.map, 1.5)
         self.gradSpace=PathPlanner.calc_gradspace(self.map)
 
-        self.a_star_pub = rospy.Publisher("/a_star", GridCells, queue_size=10)
-        self.path_pub = rospy.Publisher("/apath", Path, queue_size=10)
-        self.cspace_pub = rospy.Publisher("/path_planner/cspace", GridCells, queue_size=10)
+        self.a_star_pub = rospy.Publisher("/a_star", GridCells, queue_size=0)
+        self.path_pub = rospy.Publisher("/apath", Path, queue_size=0)
+        self.cspace_pub = rospy.Publisher("/path_planner/cspace", GridCells, queue_size=0)
 
-        self.pathPub1=rospy.Publisher('/robot_1/path1',Path,queue_size=10)
-        self.status1=rospy.Subscriber('/robot_1/newGoal',Odometry,self.chooseGoal)
-        self.replan1=rospy.Subscriber('/robot_1/replan',Odometry,self.sameGoal)
-
-        self.pathPub2=rospy.Publisher('/robot_2/path2',Path,queue_size=10)
-        self.status2=rospy.Subscriber('/robot_2/newGoal',Odometry,self.chooseGoal)
-        self.replan2=rospy.Subscriber('/robot_2/replan',Odometry,self.sameGoal)
-
-        self.pathPub3=rospy.Publisher('/robot_3/path3',Path,queue_size=10)
-        self.status3=rospy.Subscriber('/robot_3/newGoal',Odometry,self.chooseGoal)
-        self.replan3=rospy.Subscriber('/robot_3/replan',Odometry,self.sameGoal)
+        self.odomReqPubs=[]
+        self.goals=[]
         
-        self.pathPub4=rospy.Publisher('/robot_4/path4',Path,queue_size=10)
-        self.status4=rospy.Subscriber('/robot_4/newGoal',Odometry,self.chooseGoal)
-        self.replan4=rospy.Subscriber('/robot_4/replan',Odometry,self.sameGoal)
+        for i in range(1,9):
+            self.goals.append(rospy.Publisher('/robot_'+str(i)+'/path'+str(i),Path,queue_size=10))
+            rospy.Subscriber('/robot_'+str(i)+'/newGoal',Odometry,self.chooseGoal)
+            rospy.Subscriber("/robot_"+str(i)+'/replan',Odometry,self.sameGoal)
+            rospy.Subscriber('/robot_'+str(i)+'/reqedodom',Odometry,self.update_odometry)
+            self.odomReqPubs.append(rospy.Publisher('/robot_'+str(i)+'/reqingodom',String,queue_size=10))
+
         
-        self.pathPub5=rospy.Publisher('/robot_5/path5',Path,queue_size=10)
-        self.status5=rospy.Subscriber('/robot_5/newGoal',Odometry,self.chooseGoal)
-        self.replan5=rospy.Subscriber('/robot_5/replan',Odometry,self.sameGoal)
 
+        # self.goals=[self.pathPub1,self.pathPub2,self.pathPub3,self.pathPub4,self.pathPub5,self.pathPub6,self.pathPub7,self.pathPub8]
 
-        self.goals=[self.pathPub1,self.pathPub2,self.pathPub3,self.pathPub4,self.pathPub5]
-
-        self.px=[0,0,0,0,0]
-        self.py=[0,0,0,0,0]
-        self.goalPoints=[[0,0],[0,0],[0,0],[0,0],[0,0]]
+        self.px=[0,0,0,0,0,0,0,0]
+        self.py=[0,0,0,0,0,0,0,0]
+        self.goalPoints=[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]
 
         rospy.loginfo("publishing cspace")
         cspace = GridCells()
@@ -102,7 +93,9 @@ class GobalManager:
         return number
 
     def chooseGoal(self, msg):
+        
         robot=self.update_odometry(msg)
+        self.callUpdateAllPoses(robot)
         mapdata=self.cspaced
         pos=Point()
         pos.x=self.px[robot-1]
@@ -132,10 +125,12 @@ class GobalManager:
         # path_msg.header.frame_id="map"
         # path_msg.pose.position=worldpoint
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
-        self.goals[robot-1].publish(path_msg)
-        self.path_pub.publish(path_msg)
+        
+        
 
         rospy.loginfo("Done choosing goal for robot "+str(robot))
+        self.goals[robot-1].publish(path_msg)
+        self.path_pub.publish(path_msg)
 
     def sameGoal(self,msg):
         mapdata=self.cspaced
@@ -149,7 +144,20 @@ class GobalManager:
         self.goals[robot-1].publish(path_msg)
         self.path_pub.publish(path_msg)
 
-    
+    def callUpdateAllPoses(self,robot):      
+        for i in range(1,2+1):
+            if i!=robot:
+                #requesting
+                # rospy.loginfo(str((self.px[i-1],self.py[i-1])))
+                msg=String()
+                msg.data="requesting_"+str(i)
+                self.odomReqPubs[i-1].publish(msg)
+                rospy.wait_for_message('/robot_'+str(i)+'/reqedodom',Odometry)
+                # rospy.loginfo(str((self.px[i-1],self.py[i-1])))
+                # rospy.loginfo("received_"+str(i))
+            
+            
+        
 
 
 

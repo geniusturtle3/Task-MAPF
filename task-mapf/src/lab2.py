@@ -22,7 +22,6 @@ class Lab2:
         """
         ### Initialize node, name it 'lab2'
         rospy.init_node('lab2')
-        
         # rospy.loginfo(self.number)
         ### Tell ROS that this node publishes Twist messages on the '/cmd_vel' topic
         
@@ -31,7 +30,7 @@ class Lab2:
         ### Tell ROS that this node subscribes to PoseStamped messages on the '/move_base_simple/goal' topic
         ### When a message is received, call self.go_to
         name=rospy.get_name()
-        rospy.loginfo(str.split(str.split(name,'/')[1],'_')[1])
+        # rospy.loginfo(str.split(str.split(name,'/')[1],'_')[1])
         self.number=int(str.split(str.split(name,'/')[1],'_')[1])
        
         self.cmd_vel=rospy.Publisher('/robot_'+str(self.number)+'/cmd_vel',Twist)
@@ -39,10 +38,12 @@ class Lab2:
         rospy.Subscriber('/move_base_simple/goal',PoseStamped,self.executeToGoal)
         rospy.Subscriber('/robot_'+str(self.number)+'/path'+str(self.number),Path,self.execute_plan)
         self.reqCount=0
-        self.newGoalPub=rospy.Publisher('/robot_'+str(self.number)+'/newGoal',Odometry)
-        self.replanPub=rospy.Publisher('/robot_'+str(self.number)+'/replan',Odometry)
+        self.newGoalPub=rospy.Publisher('/robot_'+str(self.number)+'/newGoal',Odometry,queue_size=10)
+        self.replanPub=rospy.Publisher('/robot_'+str(self.number)+'/replan',Odometry,queue_size=10)
         rospy.Subscriber('/initialpose',
                          PoseWithCovarianceStamped, self.send_status)
+        
+        
 
         self.px,self.py,self.ptheta=0,0,0
 
@@ -67,8 +68,7 @@ class Lab2:
 
         # pass # delete this when you implement your code
 
-    def getOdom(self):
-        return self.prevOdom
+    
 
     def send_status(self,msg):
         msg=self.prevOdom
@@ -157,12 +157,15 @@ class Lab2:
         # print(f"initial heading {initialHeading} and self theta {self.ptheta}")
         diff = initialHeading-self.ptheta
         # only rotate if the difference is large-ish
-        if abs(diff) > 0.1:
+        # rospy.loginfo("Rotating to initial heading "+str(self.number))
+        while abs(diff) > 0.2:
             self.smooth_rotate(initialHeading-self.ptheta,
                                self.maximumAngVelocity)
+            diff = initialHeading-self.ptheta
+            # rospy.loginfo(str(diff))
         startTime=rospy.get_time()
         isDone = False
-    
+        # rospy.loginfo("Starting Pure Pursuit "+str(self.number))
         while True:
             # Calls findLookaheadPoint function to find the desired lookahead
             #   waypoint and saves it to chosenWaypoint.
@@ -408,7 +411,7 @@ class Lab2:
         :param angle         [float] [rad]   The distance to cover.
         :param angular_speed [float] [rad/s] The angular speed.
         """
-        stop_error = 0.005   
+        stop_error = 0.01   
         update_time = 0.05 # [s]
         initial_pose = (self.px, self.py, self.ptheta)
 
@@ -457,8 +460,8 @@ class Lab2:
 
             self.send_speed(0.0,current_speed)
             dist_traveled = abs((self.ptheta - initial_pose[2]))
-            if(dist_traveled > math.pi):
-                dist_traveled = 2*math.pi - dist_traveled
+            # if(dist_traveled > math.pi):
+            #     dist_traveled = 2*math.pi - dist_traveled
             #print(dist_traveled*180/math.pi)
             rospy.sleep(update_time)
 

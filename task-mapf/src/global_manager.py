@@ -21,7 +21,7 @@ from nav_msgs.srv import GetPlan
 from path_planner import PathPlanner
 
 
-class GobalManager:
+class GlobalManager:
     def __init__(self) -> None:
         "Constructor"
 
@@ -36,10 +36,11 @@ class GobalManager:
         self.cspace_pub = rospy.Publisher("/path_planner/cspace", GridCells, queue_size=0)
 
         self.odomReqPubs=[]
-        self.goals=[]
+        self.goalPubs=[]
+        self.numRobots = 8
         
-        for i in range(1,9):
-            self.goals.append(rospy.Publisher('/robot_'+str(i)+'/path'+str(i),Path,queue_size=10))
+        for i in range(1,self.numRobots+1):
+            self.goalPubs.append(rospy.Publisher('/robot_'+str(i)+'/path'+str(i),Path,queue_size=10))
             rospy.Subscriber('/robot_'+str(i)+'/newGoal',Odometry,self.chooseGoal)
             rospy.Subscriber("/robot_"+str(i)+'/replan',Odometry,self.sameGoal)
             rospy.Subscriber('/robot_'+str(i)+'/reqedodom',Odometry,self.update_odometry)
@@ -51,7 +52,19 @@ class GobalManager:
 
         self.px=[0,0,0,0,0,0,0,0]
         self.py=[0,0,0,0,0,0,0,0]
+        self.testGoalPoints = [[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]
         self.goalPoints=[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]
+ 
+
+        self.opencells=[]
+        for i in range(len(self.cspaced.data)):
+            pnt=self.cspaced.data[i]
+            if pnt<100 and pnt>-1:
+                self.opencells.append(i)
+
+        self.chooseGoals()
+        rospy.loginfo("Done choosing temp goals")
+        rospy.loginfo(self.testGoalPoints)   
 
         rospy.loginfo("publishing cspace")
         cspace = GridCells()
@@ -93,59 +106,58 @@ class GobalManager:
         return number
 
     def chooseGoal(self, msg):
-        
         robot=self.update_odometry(msg)
         self.callUpdateAllPoses(robot)
-        mapdata=self.cspaced
         pos=Point()
         pos.x=self.px[robot-1]
         pos.y=self.py[robot-1]
-        start=PathPlanner.world_to_grid(mapdata,pos)
-        opencells=[]
-        for i in range(len(mapdata.data)):
-            pnt=mapdata.data[i]
-            if pnt<100 and pnt>-1:
-                opencells.append(i)
-        # print(opencells)
+        start=PathPlanner.world_to_grid(self.cspaced,pos)
         goalPoint=[]
         while len(goalPoint)==0:
-            tempPoint=random.choice(opencells)
+            tempPoint=random.choice(self.opencells)
             # rospy.loginfo(str(robot)+" testing "+str(tempPoint))
-            gridPoint=PathPlanner.index_to_grid(mapdata,tempPoint)
-            path=PathPlanner.a_star(mapdata,start,gridPoint,self.gradSpace)
+            gridPoint=PathPlanner.index_to_grid(self.cspaced,tempPoint)
+            path=PathPlanner.a_star(self.cspaced,start,gridPoint,self.gradSpace)
             if len(path)>0:
                 goalPoint=gridPoint
                 self.goalPoints[robot-1]=goalPoint
-        
 
-        # path_msg = PoseStamped()
-        # worldpoint=PathPlanner.grid_to_world(mapdata,goalPoint)
-
-        # path_msg.header=self.odomHeader
-        # path_msg.header.frame_id="map"
-        # path_msg.pose.position=worldpoint
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         
-        
-
         rospy.loginfo("Done choosing goal for robot "+str(robot))
-        self.goals[robot-1].publish(path_msg)
+        self.goalPubs[robot-1].publish(path_msg)
         self.path_pub.publish(path_msg)
 
+    def chooseGoals(self):
+        for i in range(self.numRobots):
+            curGoal = PathPlanner.index_to_grid(self.cspaced,random.choice(self.opencells))
+            self.testGoalPoints[i] = curGoal
+
+    def assignTasks(self):
+        self.assignedTasks = {}
+        for task in self.testGoalPoints:
+            shortestDistIndex = 0
+            shortestDist = float('inf')
+            for i in range(self.numRobots):
+                dist = math.sqrt((self.px[i]-task[0])**2 + (self.py[i]-task[1])**2)
+                if dist < shortestDist:
+                    shortestDist = dist
+                    shortestDistIndex = i
+            self.assignedTasks[shortestDistIndex] = task
+
     def sameGoal(self,msg):
-        mapdata=self.cspaced
         robot=self.update_odometry(msg)
         pos=Point()
         pos.x=self.px[robot-1]
         pos.y=self.py[robot-1]
-        start=PathPlanner.world_to_grid(mapdata,pos)
-        path=PathPlanner.a_star(mapdata,start,self.goalPoints[robot-1],self.gradSpace)
+        start=PathPlanner.world_to_grid(self.cspaced,pos)
+        path=PathPlanner.a_star(self.cspaced,start,self.goalPoints[robot-1],self.gradSpace)
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
-        self.goals[robot-1].publish(path_msg)
+        self.goalPubs[robot-1].publish(path_msg)
         self.path_pub.publish(path_msg)
 
-    def callUpdateAllPoses(self,robot):      
-        for i in range(1,2+1):
+    def callUpdateAllPoses(self,robot):
+        for i in range(1,self.numRobots+1):
             if i!=robot:
                 #requesting
                 # rospy.loginfo(str((self.px[i-1],self.py[i-1])))
@@ -165,14 +177,9 @@ class GobalManager:
         """
         Runs the node until Ctrl-C is pressed.
         """
-        
-        # print("starting to choose 1")
-        # self.chooseGoal(1,self.cspaced)
-        # print("starting to choose 2")
-        # self.chooseGoal(2,self.cspaced)
         rospy.spin()
 
 
         
 if __name__ == '__main__':
-    GobalManager().run()
+    GlobalManager().run()

@@ -1,0 +1,37 @@
+<launch>
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
+  <!-- Start Robot world -->
+  <!-- <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find lab4)/worlds/turtlebot.world"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="debug" value="false"/>
+    <arg name="headless" value="false"/>
+  </include> -->
+  <node pkg="tf" type="static_transform_publisher" name="camera_tf" args="-1.95 -0.55 2.0 -1.58 0 -1.58 /odom /camera_link 100"/>
+
+  <env name="GAZEBO_MODEL_PATH" value="$(find task-mapf)/models:$(optenv GAZEBO_MODEL_PATH"/>
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/turtlebot3_world.world"/>
+    <!-- <arg name="world_name" value="$(find lab4)/worlds/turtlebot.world"/> -->
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="headless" value="false"/>
+    <arg name="debug" value="false"/>
+  </include>
+  <!-- include our robots -->
+  <include file="$(find task-mapf)/launch/robots.launch"/>
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find task-mapf)/rviz/multibottest.rviz"/>
+  <node pkg="map_server" type="map_server" name="map_server" args="$(find task-mapf)/maps/mymap.yaml"/>
+  
+  <!-- <node pkg="tf" type="static_transform_publisher" name="map_to_odom1" args="0 0 0 0 0 0 /map robot1_tf/odom 100"/>
+  <node pkg="tf" type="static_transform_publisher" name="map_to_odom2" args="0 0 0 0 0 0 /map robot2_tf/odom 100"/> -->
+  <node name="path_planner" pkg="task-mapf" type="path_planner.py" output="screen">
+      <param name="robot" value="robot1" />
+  </node>
+  <node name="manager" pkg="task-mapf" type="global_manager.py" output="screen">
+  </node>  
+  
+  
+</launch>

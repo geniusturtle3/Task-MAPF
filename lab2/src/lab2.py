@@ -40,7 +40,7 @@ class Lab2:
         rospy.Subscriber('/robot_'+str(self.number)+'/goal'+str(self.number),PoseStamped,self.execute_plan)
         self.reqCount=0
 
-        self.statusPub=rospy.Publisher('/robot_'+str(self.number)+'/status',String)
+        self.statusPub=rospy.Publisher('/robot_'+str(self.number)+'/status',Odometry)
         rospy.Subscriber('/initialpose',
                          PoseWithCovarianceStamped, self.send_status)
 
@@ -51,6 +51,7 @@ class Lab2:
         self.px,self.py,self.ptheta=0,0,0
 
         self.pxStart, self.pyStart, self.pthetaStart = 0, 0, 0
+        self.prevOdom=None
 
         self.useOdom = True
         # a value of 0.45 meters seem to smooth out things while keeping the robot fairly on track
@@ -72,9 +73,9 @@ class Lab2:
 
 
     def send_status(self,msg):
-        msg=String()
-        msg.data="awaiting_"+str(self.number)
-        rospy.loginfo(msg.data)
+        msg=self.prevOdom
+        # msg.data="awaiting_"+str(self.number)
+        # rospy.loginfo(msg.data)
         self.statusPub.publish(msg)
 
     def send_speed(self, linear_speed: float, angular_speed: float):
@@ -165,9 +166,6 @@ class Lab2:
 
             tolerance = 0.2
             while self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
-                msg=String()
-                msg.data="going_"+str(self.number)
-                self.statusPub.publish(msg)
                 get_plan = rospy.ServiceProxy("/plan_path", GetPlan)
 
                 # we have to give it start and end in wordl coordinates
@@ -183,8 +181,7 @@ class Lab2:
                 # Execute the path        
                 self.pure_pursuit(planToDrive, tolerance=tolerance)
             rospy.loginfo("Finished driving to goal")
-            msg=String()
-            msg.data="awaiting_"+str(self.number)
+            msg=self.prevOdom
             self.statusPub.publish(msg)
         # # we have to give it start and end in wordl coordinates
         # startPose = PoseStamped()
@@ -437,6 +434,7 @@ class Lab2:
         quat_orig = msg.pose.pose.orientation
         (roll, pitch, yaw) = euler_from_quaternion([quat_orig.x, quat_orig.y, quat_orig.z, quat_orig.w])
         self.ptheta = yaw
+        self.prevOdom=msg
 
 
     def smooth_drive(self, distance: float, linear_speed: float):

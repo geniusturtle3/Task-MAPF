@@ -51,9 +51,9 @@ class GlobalManager:
         # self.goals=[self.pathPub1,self.pathPub2,self.pathPub3,self.pathPub4,self.pathPub5,self.pathPub6,self.pathPub7,self.pathPub8]
 
         self.px=[0,0,0,0,0,0,0,0]
-        self.py=[0,0,0,0,0,0,0,0]
-        self.testGoalPoints = [[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]]]
-        self.goalPoints=[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]
+        self.py=[[0,0,0,0,0,0,0,0]]
+        self.goalPoints = [[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]]]
+        # self.paths = [None, None, None, None, None, None, None, None]
  
 
         self.opencells=[]
@@ -61,15 +61,6 @@ class GlobalManager:
             pnt=self.cspaced.data[i]
             if pnt<100 and pnt>-1:
                 self.opencells.append(i)
-
-        self.chooseGoals()
-        rospy.loginfo("Done choosing temp goals")
-        rospy.loginfo(self.testGoalPoints)   
-
-        self.assignedTasks = {}
-        self.assignTasks()
-        rospy.loginfo("Done assigning tasks")
-        rospy.loginfo(self.assignedTasks)
 
         rospy.loginfo("publishing cspace")
         cspace = GridCells()
@@ -85,9 +76,6 @@ class GlobalManager:
                     self.cspaced, (i % self.cspaced.info.width, int(i / self.cspaced.info.width))))
 
         self.cspace_pub.publish(cspace)
-        
-
-        
         
 
     def update_odometry(self, msg: Odometry):
@@ -125,35 +113,14 @@ class GlobalManager:
             path=PathPlanner.a_star(self.cspaced,start,gridPoint,self.gradSpace)
             if len(path)>0:
                 goalPoint=gridPoint
-                self.goalPoints[robot-1]=goalPoint
+                self.goalPoints[robot-1][0]=random.randint(50,100)
+                self.goalPoints[robot-1][1]=goalPoint
 
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         
         rospy.loginfo("Done choosing goal for robot "+str(robot))
+        # self.paths[robot-1] = path_msg
         self.goalPubs[robot-1].publish(path_msg)
-        self.path_pub.publish(path_msg)
-
-    def chooseGoals(self):
-        for i in range(self.numRobots):
-            goalTime = random.randint(5,20)
-            curGoal = PathPlanner.index_to_grid(self.cspaced,random.choice(self.opencells))
-            self.testGoalPoints[i][0] = goalTime
-            self.testGoalPoints[i][1] = curGoal
-
-    def assignTasks(self):
-        self.assignedTasks = {}
-        for goal in self.testGoalPoints:
-            task = goal[1]
-            shortestDistIndex = 0
-            shortestDist = float('inf')
-            for i in range(self.numRobots):
-                if i in self.assignedTasks:
-                    continue
-                dist = math.sqrt((self.px[i]-task[0])**2 + (self.py[i]-task[1])**2)
-                if dist < shortestDist:
-                    shortestDist = dist
-                    shortestDistIndex = i
-            self.assignedTasks[shortestDistIndex] = goal
 
     def sameGoal(self,msg):
         robot=self.update_odometry(msg)
@@ -161,7 +128,7 @@ class GlobalManager:
         pos.x=self.px[robot-1]
         pos.y=self.py[robot-1]
         start=PathPlanner.world_to_grid(self.cspaced,pos)
-        path=PathPlanner.a_star(self.cspaced,start,self.goalPoints[robot-1],self.gradSpace)
+        path=PathPlanner.a_star(self.cspaced,start,self.goalPoints[robot-1][1],self.gradSpace)
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.goalPubs[robot-1].publish(path_msg)
         self.path_pub.publish(path_msg)

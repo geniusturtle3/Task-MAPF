@@ -82,6 +82,13 @@ class PathPlanner:
         return math.dist(p1, p2)
     
     @staticmethod
+    def path_length(path: list[tuple[int, int]]) -> float:
+        length = 0
+        for i in range(len(path)-1):
+            length += PathPlanner.euclidean_distance_index(path[i], path[i+1])
+        return length
+    
+    @staticmethod
     def euclidean_distance_index(mapdata: OccupancyGrid, p1: int, p2: int) -> float:
         """
         Calculates the Euclidean distance between two points.

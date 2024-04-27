@@ -52,7 +52,7 @@ class GlobalManager:
 
         self.px=[0,0,0,0,0,0,0,0]
         self.py=[0,0,0,0,0,0,0,0]
-        self.testGoalPoints = [[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]
+        self.testGoalPoints = [[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]],[0,[0,0]]]
         self.goalPoints=[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]
  
 
@@ -65,6 +65,11 @@ class GlobalManager:
         self.chooseGoals()
         rospy.loginfo("Done choosing temp goals")
         rospy.loginfo(self.testGoalPoints)   
+
+        self.assignedTasks = {}
+        self.assignTasks()
+        rospy.loginfo("Done assigning tasks")
+        rospy.loginfo(self.assignedTasks)
 
         rospy.loginfo("publishing cspace")
         cspace = GridCells()
@@ -130,20 +135,25 @@ class GlobalManager:
 
     def chooseGoals(self):
         for i in range(self.numRobots):
+            goalTime = random.randint(5,20)
             curGoal = PathPlanner.index_to_grid(self.cspaced,random.choice(self.opencells))
-            self.testGoalPoints[i] = curGoal
+            self.testGoalPoints[i][0] = goalTime
+            self.testGoalPoints[i][1] = curGoal
 
     def assignTasks(self):
         self.assignedTasks = {}
-        for task in self.testGoalPoints:
+        for goal in self.testGoalPoints:
+            task = goal[1]
             shortestDistIndex = 0
             shortestDist = float('inf')
             for i in range(self.numRobots):
+                if i in self.assignedTasks:
+                    continue
                 dist = math.sqrt((self.px[i]-task[0])**2 + (self.py[i]-task[1])**2)
                 if dist < shortestDist:
                     shortestDist = dist
                     shortestDistIndex = i
-            self.assignedTasks[shortestDistIndex] = task
+            self.assignedTasks[shortestDistIndex] = goal
 
     def sameGoal(self,msg):
         robot=self.update_odometry(msg)

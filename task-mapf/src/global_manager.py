@@ -19,6 +19,7 @@ import random
 import numpy as np
 from nav_msgs.srv import GetPlan
 from path_planner import PathPlanner
+from priority_queue import PriorityQueue
 
 
 class GobalManager:
@@ -37,6 +38,7 @@ class GobalManager:
 
         self.odomReqPubs=[]
         self.goals=[]
+        self.numRobots=8
         
         for i in range(1,9):
             self.goals.append(rospy.Publisher('/robot_'+str(i)+'/path'+str(i),Path,queue_size=10))
@@ -51,7 +53,9 @@ class GobalManager:
 
         self.px=[0,0,0,0,0,0,0,0]
         self.py=[0,0,0,0,0,0,0,0]
-        self.goalPoints=[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]
+        self.paths = [None, None, None, None, None, None, None, None]
+        self.goalPoints={}
+        self.unplannedRobots = PriorityQueue()
 
         rospy.loginfo("publishing cspace")
         cspace = GridCells()
@@ -93,7 +97,6 @@ class GobalManager:
         return number
 
     def chooseGoal(self, msg):
-        
         robot=self.update_odometry(msg)
         self.callUpdateAllPoses(robot)
         mapdata=self.cspaced
@@ -115,7 +118,8 @@ class GobalManager:
             path=PathPlanner.a_star(mapdata,start,gridPoint,self.gradSpace)
             if len(path)>0:
                 goalPoint=gridPoint
-                self.goalPoints[robot-1]=goalPoint
+                goalTime = random.randint(50,200)
+                self.goalPoints[robot-1] = (goalTime, goalPoint)
         
 
         # path_msg = PoseStamped()
@@ -125,12 +129,25 @@ class GobalManager:
         # path_msg.header.frame_id="map"
         # path_msg.pose.position=worldpoint
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
+        self.paths[robot-1] = path_msg
         
-        
-
         rospy.loginfo("Done choosing goal for robot "+str(robot))
-        self.goals[robot-1].publish(path_msg)
-        self.path_pub.publish(path_msg)
+        # self.goals[robot-1].publish(path_msg)
+        # self.path_pub.publish(path_msg)
+
+        if self.allGoalsChosen():
+            rospy.loginfo("All goals chosen")
+            self.prioritizeRobots()
+
+    def allGoalsChosen(self):
+        return len(self.goalPoints)==self.numRobots
+    
+    def prioritizeRobots(self):
+        for key, value in self.goalPoints.items():
+            path = self.paths[key-1]
+            rospy.loginfo("Robot "+str(key)+" has path length "+str(PathPlanner.path_length(self.cspaced,path)))
+            self.unplannedRobots.put(value, key)
+        # rospy.loginfo(str(self.unplannedRobots.get_queue()))
 
     def sameGoal(self,msg):
         mapdata=self.cspaced
@@ -139,13 +156,13 @@ class GobalManager:
         pos.x=self.px[robot-1]
         pos.y=self.py[robot-1]
         start=PathPlanner.world_to_grid(mapdata,pos)
-        path=PathPlanner.a_star(mapdata,start,self.goalPoints[robot-1],self.gradSpace)
+        path=PathPlanner.a_star(mapdata,start,self.goalPoints[robot-1][1],self.gradSpace)
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.goals[robot-1].publish(path_msg)
         self.path_pub.publish(path_msg)
 
     def callUpdateAllPoses(self,robot):      
-        for i in range(1,2+1):
+        for i in range(1,self.numRobots+1):
             if i!=robot:
                 #requesting
                 # rospy.loginfo(str((self.px[i-1],self.py[i-1])))

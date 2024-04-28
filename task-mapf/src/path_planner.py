@@ -94,6 +94,21 @@ class PathPlanner:
         point2 = PathPlanner.index_to_grid(mapdata, p2)
 
         return PathPlanner.euclidean_distance(point1, point2)
+    
+    @staticmethod
+    def path_length(mapdata: OccupancyGrid, path: Path) -> float:
+        """
+        Calculates the length of a path in the occupancy grid.
+        :param mapdata [OccupancyGrid] The map information.
+        :param path    [(int)]         The path as a list of indices.
+        :return        [float]         The length of the path.
+        """
+        length = 0
+        for i in range(len(path.poses) - 1):
+            p1 = [path.poses[i].pose.position.x, path.poses[i].pose.position.y]
+            p2 = [path.poses[i+1].pose.position.x, path.poses[i+1].pose.position.y]
+            length += PathPlanner.euclidean_distance(p1, p2)
+        return length
 
         
 

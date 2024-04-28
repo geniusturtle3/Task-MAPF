@@ -145,9 +145,9 @@ class GobalManager:
     def prioritizeRobots(self):
         for key, value in self.goalPoints.items():
             path = self.paths[key-1]
-            rospy.loginfo("Robot "+str(key)+" has path length "+str(PathPlanner.path_length(self.cspaced,path)))
-            self.unplannedRobots.put(value, key)
-        # rospy.loginfo(str(self.unplannedRobots.get_queue()))
+            path_length = str(PathPlanner.path_length(self.cspaced,path))
+            self.unplannedRobots.put(value, path_length)
+        rospy.loginfo(str(self.unplannedRobots.get_queue()))
 
     def sameGoal(self,msg):
         mapdata=self.cspaced

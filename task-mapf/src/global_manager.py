@@ -39,7 +39,7 @@ class GobalManager:
         self.odomReqPubs=[]
         self.goals=[]
         self.numRobots=8
-        self.priorityMultiplier = 75
+        self.priorityMultiplier = 50
         self.priorityOffset = 5*self.priorityMultiplier
         
         for i in range(1,9):
@@ -57,6 +57,7 @@ class GobalManager:
         self.py=[0,0,0,0,0,0,0,0]
         self.paths = [None, None, None, None, None, None, None, None]
         self.goalPoints={}
+        self.isPlanned = [False, False, False, False, False, False, False, False]
         self.unplannedRobots = PriorityQueue()
 
         rospy.loginfo("publishing cspace")
@@ -73,10 +74,6 @@ class GobalManager:
                     self.cspaced, (i % self.cspaced.info.width, int(i / self.cspaced.info.width))))
 
         self.cspace_pub.publish(cspace)
-        
-
-        
-        
 
     def update_odometry(self, msg: Odometry):
         """
@@ -115,7 +112,6 @@ class GobalManager:
         goalPoint=[]
         while len(goalPoint)==0:
             tempPoint=random.choice(opencells)
-            # rospy.loginfo(str(robot)+" testing "+str(tempPoint))
             gridPoint=PathPlanner.index_to_grid(mapdata,tempPoint)
             path=PathPlanner.a_star(mapdata,start,gridPoint,self.gradSpace)
             if len(path)>0:
@@ -132,35 +128,37 @@ class GobalManager:
         # path_msg.pose.position=worldpoint
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.paths[robot-1] = path_msg
+        self.isPlanned[robot-1] = True
         
         rospy.loginfo("Done choosing goal for robot "+str(robot))
-        # self.goals[robot-1].publish(path_msg)
-        # self.path_pub.publish(path_msg)
 
         if self.allGoalsChosen():
             rospy.loginfo("All goals chosen")
             rospy.loginfo(str(self.goalPoints))
+            rospy.loginfo(str(self.isPlanned))
             self.prioritizeRobots()
 
     def allGoalsChosen(self):
-        return len(self.goalPoints)==self.numRobots
+        return all(self.isPlanned)
     
     def prioritizeRobots(self):
         for key, value in self.goalPoints.items():
             path = self.paths[key-1]
             path_length = PathPlanner.path_length(self.cspaced,path)
             priority = self.priorityMultiplier*path_length
-            rospy.loginfo(priority)
             if priority > value[1]:
                 priority += self.priorityOffset
-            rospy.loginfo("Robot "+str(key)+" has priority "+str(path_length*self.priorityMultiplier)+" and goal time "+str(value[1])+" and priority "+str(priority))
             self.unplannedRobots.put(value, priority)
-        # self.releaseRobots()
+        self.releaseRobots()
 
     def releaseRobots(self):
-        for i in range(self.numRobots):
+        while not self.unplannedRobots.empty():
             robotInfo = self.unplannedRobots.get()
-            rospy.loginfo(robotInfo)
+            robotNum = robotInfo[0]
+            path_msg = self.paths[robotNum-1]
+            self.goals[robotNum-1].publish(path_msg)
+            self.path_pub.publish(path_msg)
+        self.isPlanned = [False, False, False, False, False, False, False, False]
 
     def sameGoal(self,msg):
         mapdata=self.cspaced

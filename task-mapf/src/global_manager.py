@@ -55,7 +55,8 @@ class GobalManager:
 
         self.px=[0,0,0,0,0,0,0,0]
         self.py=[0,0,0,0,0,0,0,0]
-        self.paths = [None, None, None, None, None, None, None, None]
+        self.gridPaths = [None, None, None, None, None, None, None, None]
+        self.pathMessages = [None, None, None, None, None, None, None, None]
         self.goalPoints={}
         self.isPlanned = [False, False, False, False, False, False, False, False]
         self.unplannedRobots = PriorityQueue()
@@ -127,7 +128,8 @@ class GobalManager:
         # path_msg.header.frame_id="map"
         # path_msg.pose.position=worldpoint
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
-        self.paths[robot-1] = path_msg
+        self.gridPaths[robot-1] = path
+        self.pathMessages[robot-1] = path_msg
         self.isPlanned[robot-1] = True
         
         rospy.loginfo("Done choosing goal for robot "+str(robot))
@@ -143,20 +145,18 @@ class GobalManager:
     
     def prioritizeRobots(self):
         for key, value in self.goalPoints.items():
-            path = self.paths[key-1]
+            path = self.pathMessages[key-1]
             path_length = PathPlanner.path_length(self.cspaced,path)
             priority = self.priorityMultiplier*path_length
             if priority > value[1]:
                 priority += self.priorityOffset
             self.unplannedRobots.put(value, priority)
-        self.releaseRobots()
+        self.releaseRobots(self.adjustPaths())
 
-    def releaseRobots(self):
-        while not self.unplannedRobots.empty():
-            robotInfo = self.unplannedRobots.get()
-            robotNum = robotInfo[0]
-            path_msg = self.paths[robotNum-1]
-            self.goals[robotNum-1].publish(path_msg)
+    def releaseRobots(self, plannedRobots):
+        for robot in plannedRobots:
+            path_msg = self.pathMessages[robot-1]
+            self.goals[robot-1].publish(path_msg)
             self.path_pub.publish(path_msg)
         self.isPlanned = [False, False, False, False, False, False, False, False]
 
@@ -183,11 +183,46 @@ class GobalManager:
                 rospy.wait_for_message('/robot_'+str(i)+'/reqedodom',Odometry)
                 # rospy.loginfo(str((self.px[i-1],self.py[i-1])))
                 # rospy.loginfo("received_"+str(i))
-            
-            
+    
+    def checkLineCollision(self, p11, p12, p21, p22):
+        def orientation(p, q, r):
+            val = (q.pose.position.y - p.pose.position.y) * (r.pose.position.x - q.pose.position.x) - (q.pose.position.x - p.pose.position.x) * (r.pose.position.y - q.pose.position.y)
+            if val == 0:
+                return 0
+            return 1 if val > 0 else 2
         
+        def on_segment(p, q, r):
+            return (q.pose.position.x <= max(p.pose.position.x, r.pose.position.x) and q.pose.position.x >= min(p.pose.position.x, r.pose.position.x) 
+                    and q.pose.position.y <= max(p.pose.position.y, r.pose.position.y) and q.pose.position.y >= min(p.pose.position.y, r.pose.position.y))
+        
+        o1 = orientation(p11, p12, p21)
+        o2 = orientation(p11, p12, p22)
+        o3 = orientation(p21, p22, p11)
+        o4 = orientation(p21, p22, p12)
+        
+        if (o1 != o2 and o3 != o4) or \
+           (o1 == 0 and on_segment(p11, p21, p12)) or \
+            (o2 == 0 and on_segment(p11, p22, p12)) or \
+            (o3 == 0 and on_segment(p21, p11, p22)) or \
+            (o4 == 0 and on_segment(p21, p12, p22)):
+            return True
+        return False
 
-
+    def checkPathCollision(self, path1, path2):
+        for i in range(len(path1.poses)-1):
+            for j in range(len(path2.poses)-1):
+                if self.checkLineCollision(path1.poses[i], path1.poses[i+1], path2.poses[j], path2.poses[j+1]):
+                    return True
+        return False
+    
+    def adjustPaths(self):
+        plannedRobots = []
+        plannedRobots.append(self.unplannedRobots.get()[0])
+        while not self.unplannedRobots.empty():
+            robot = self.unplannedRobots.get()
+            num = robot[0]
+            plannedRobots.append(num)
+        return plannedRobots
 
     def run(self):
         """

@@ -39,6 +39,8 @@ class GobalManager:
         self.odomReqPubs=[]
         self.goals=[]
         self.numRobots=8
+        self.priorityMultiplier = 75
+        self.priorityOffset = 5*self.priorityMultiplier
         
         for i in range(1,9):
             self.goals.append(rospy.Publisher('/robot_'+str(i)+'/path'+str(i),Path,queue_size=10))
@@ -119,7 +121,7 @@ class GobalManager:
             if len(path)>0:
                 goalPoint=gridPoint
                 goalTime = random.randint(50,200)
-                self.goalPoints[robot-1] = (goalTime, goalPoint)
+                self.goalPoints[robot] = (robot, goalTime, goalPoint)
         
 
         # path_msg = PoseStamped()
@@ -137,6 +139,7 @@ class GobalManager:
 
         if self.allGoalsChosen():
             rospy.loginfo("All goals chosen")
+            rospy.loginfo(str(self.goalPoints))
             self.prioritizeRobots()
 
     def allGoalsChosen(self):
@@ -145,9 +148,19 @@ class GobalManager:
     def prioritizeRobots(self):
         for key, value in self.goalPoints.items():
             path = self.paths[key-1]
-            path_length = str(PathPlanner.path_length(self.cspaced,path))
-            self.unplannedRobots.put(value, path_length)
-        rospy.loginfo(str(self.unplannedRobots.get_queue()))
+            path_length = PathPlanner.path_length(self.cspaced,path)
+            priority = self.priorityMultiplier*path_length
+            rospy.loginfo(priority)
+            if priority > value[1]:
+                priority += self.priorityOffset
+            rospy.loginfo("Robot "+str(key)+" has priority "+str(path_length*self.priorityMultiplier)+" and goal time "+str(value[1])+" and priority "+str(priority))
+            self.unplannedRobots.put(value, priority)
+        # self.releaseRobots()
+
+    def releaseRobots(self):
+        for i in range(self.numRobots):
+            robotInfo = self.unplannedRobots.get()
+            rospy.loginfo(robotInfo)
 
     def sameGoal(self,msg):
         mapdata=self.cspaced
@@ -156,7 +169,7 @@ class GobalManager:
         pos.x=self.px[robot-1]
         pos.y=self.py[robot-1]
         start=PathPlanner.world_to_grid(mapdata,pos)
-        path=PathPlanner.a_star(mapdata,start,self.goalPoints[robot-1][1],self.gradSpace)
+        path=PathPlanner.a_star(mapdata,start,self.goalPoints[robot-1][2],self.gradSpace)
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.goals[robot-1].publish(path_msg)
         self.path_pub.publish(path_msg)

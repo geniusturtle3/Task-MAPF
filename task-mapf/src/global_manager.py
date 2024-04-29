@@ -184,44 +184,59 @@ class GobalManager:
                 # rospy.loginfo(str((self.px[i-1],self.py[i-1])))
                 # rospy.loginfo("received_"+str(i))
     
-    def checkLineCollision(self, p11, p12, p21, p22):
+    def checkLineCollision(self, a, b, c, d):
         def orientation(p, q, r):
-            val = (q.pose.position.y - p.pose.position.y) * (r.pose.position.x - q.pose.position.x) - (q.pose.position.x - p.pose.position.x) * (r.pose.position.y - q.pose.position.y)
+            val = (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1])
             if val == 0:
-                return 0
-            return 1 if val > 0 else 2
-        
+                return 0  # colinear
+            return 1 if val > 0 else 2  # clockwise or counterclockwise
+
         def on_segment(p, q, r):
-            return (q.pose.position.x <= max(p.pose.position.x, r.pose.position.x) and q.pose.position.x >= min(p.pose.position.x, r.pose.position.x) 
-                    and q.pose.position.y <= max(p.pose.position.y, r.pose.position.y) and q.pose.position.y >= min(p.pose.position.y, r.pose.position.y))
-        
-        o1 = orientation(p11, p12, p21)
-        o2 = orientation(p11, p12, p22)
-        o3 = orientation(p21, p22, p11)
-        o4 = orientation(p21, p22, p12)
-        
+            return (q[0] <= max(p[0], r[0]) and q[0] >= min(p[0], r[0]) and
+                    q[1] <= max(p[1], r[1]) and q[1] >= min(p[1], r[1]))
+
+        o1 = orientation(a, b, c)
+        o2 = orientation(a, b, d)
+        o3 = orientation(c, d, a)
+        o4 = orientation(c, d, b)
+
         if (o1 != o2 and o3 != o4) or \
-           (o1 == 0 and on_segment(p11, p21, p12)) or \
-            (o2 == 0 and on_segment(p11, p22, p12)) or \
-            (o3 == 0 and on_segment(p21, p11, p22)) or \
-            (o4 == 0 and on_segment(p21, p12, p22)):
-            return True
+            (o1 == 0 and on_segment(a, c, b)) or \
+            (o2 == 0 and on_segment(a, d, b)) or \
+            (o3 == 0 and on_segment(c, a, d)) or \
+            (o4 == 0 and on_segment(c, b, d)):
+                return True
         return False
 
     def checkPathCollision(self, path1, path2):
-        for i in range(len(path1.poses)-1):
-            for j in range(len(path2.poses)-1):
-                if self.checkLineCollision(path1.poses[i], path1.poses[i+1], path2.poses[j], path2.poses[j+1]):
-                    return True
-        return False
+        for i in range(len(path1)-1):
+            for j in range(len(path2)-1):
+                if self.checkLineCollision(path1[i], path1[i+1], path2[j], path2[j+1]):
+                    return j
+        return -1
+    
+    def adjustPath(self, robot, index):
+        collisionCell = self.gridPaths[robot-1][index]
+        updatedCell = (collisionCell[0] + random.randint(-10,10), collisionCell[1]+random.randint(-10,10))
+        while not PathPlanner.is_cell_walkable(self.cspaced, updatedCell):
+            updatedCell = (updatedCell[0] + random.randint(-10,10), updatedCell[1]+random.randint(-10,10))
+        self.gridPaths[robot-1][index] = updatedCell
     
     def adjustPaths(self):
         plannedRobots = []
         plannedRobots.append(self.unplannedRobots.get()[0])
         while not self.unplannedRobots.empty():
             robot = self.unplannedRobots.get()
-            num = robot[0]
-            plannedRobots.append(num)
+            currentBot = robot[0]
+            for i in range(len(plannedRobots)):
+                plannedRobot = plannedRobots[i]
+                collIndex = self.checkPathCollision(self.gridPaths[currentBot-1], self.gridPaths[plannedRobot-1])
+                if collIndex > 0:
+                    self.adjustPath(currentBot, collIndex)
+                    i -= 1
+                path_msg = PathPlanner.path_to_message(self.cspaced, self.gridPaths[currentBot-1])
+                self.pathMessages[currentBot-1] = path_msg
+            plannedRobots.append(currentBot)
         return plannedRobots
 
     def run(self):

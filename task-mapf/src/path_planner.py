@@ -392,7 +392,7 @@ class PathPlanner:
         return newmapdata
 
     @staticmethod
-    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid=None) -> list[tuple[int, int]]:
+    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid=None,otherPaths=None) -> list[tuple[int, int]]:
         """
         Calculates the Optimal path using the A* algorithm.
         Publishes the list of cells that were added to the original map.
@@ -401,8 +401,8 @@ class PathPlanner:
         :param goal [int]           The target grid location to pathfind to.
         :return        [list[tuple(int, int)]] The Optimal Path from start to goal.
         """
-        # rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" %
-        #               (start[0], start[1], goal[0], goal[1]))
+        rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" %
+                      (start[0], start[1], goal[0], goal[1]))
 
         # Check if start and goal are walkable
         # startindex=PathPlanner.grid_to_index(mapdata,start)
@@ -426,8 +426,11 @@ class PathPlanner:
         explored = {}
         exppoints = []
         wvpoint = []
+        robot_radius_cells = math.ceil(
+                    (0.178 * 0.5) / mapdata.info.resolution)
+        checkPaths=otherPaths!=None
         checkFat=gradSpace!=None
-        q.put((start, None, 0), PathPlanner.euclidean_distance(start, goal))
+        q.put((start, None, 0,0), PathPlanner.euclidean_distance(start, goal))
         while not q.empty():
             element = q.get()
             cords = element[0]
@@ -436,18 +439,19 @@ class PathPlanner:
                 prev = cords
             heading = math.atan2(cords[1]-prev[1], cords[0]-prev[0])
             g = element[2]  # cost sof far at this element
-            explored[cords] = element
+            ts = element[3] # time step
+            explored[(cords, ts)] = element
             exppoints.append(cords)
 
             if cords == goal:
+                goalts=ts
                 # Once we've hit the goal, reconstruct the path and then return it
-                return PathPlanner.reconstructPath(explored, start, goal)
+                return PathPlanner.reconstructPath(explored, start, goal,goalts)
 
             neighbors = PathPlanner.neighbors_of_8(mapdata, cords)
 
             for i in range(len(neighbors)):
                 neighbor = neighbors[i]
-                # print(neighbor,neighbors)
                 manhatdis = abs(neighbor[0]-cords[0])+abs(neighbor[1]-cords[1])
                 if manhatdis > 1:  # Oridinal Neighbors
                     gfactor = 1.4
@@ -458,6 +462,7 @@ class PathPlanner:
                 turnAngle = math.fmod(math.fmod(newHeading-heading, math.pi*2)+math.pi*2, math.pi*2)
                 turningFactor = 180/math.pi*turnAngle*.01
                 cspaceFactor = 0
+                skip=False
                 if checkFat:
                     dis = gradSpace.data[PathPlanner.grid_to_index(gradSpace, neighbor)]
                     
@@ -465,20 +470,27 @@ class PathPlanner:
                         cspaceFactor = (gfactor*(16-dis)**2)*.5
                     elif dis < 20:
                         cspaceFactor = gfactor*(20-dis)*.05
-    
+                if checkPaths:
+                    for path in otherPaths:
+                        if ts+1<len(path):
+                            pathpoint = path[ts+1]
+                            cellswithin = PathPlanner.neighbors_within_dist(mapdata, pathpoint, robot_radius_cells)
+                            if neighbor in cellswithin:
+                                skip=True
+                                break                   
 
-                # print(gfactor)
-                if explored.get(neighbor) is None or explored.get(neighbor)[2] > g+gfactor+cspaceFactor:
+                # print(explored)
+                if (not skip) and (explored.get((neighbor,ts+1)) is None or explored.get((neighbor,ts+1))[2] > g+gfactor+cspaceFactor):
                     f = g+gfactor + \
                         PathPlanner.euclidean_distance(neighbor, goal) + cspaceFactor + turningFactor
                     # print((neighbor,cords,g+1),f)
-                    q.put((neighbor, cords, g+gfactor+cspaceFactor+turningFactor), f)
+                    q.put((neighbor, cords, g+gfactor+cspaceFactor+turningFactor,ts+1), f)
 
         rospy.loginfo('Could not reach goal')
         return []
 
     @staticmethod
-    def reconstructPath(explored: dict, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:   
+    def reconstructPath(explored: dict, start: tuple[int, int], goal: tuple[int, int], goalts) -> list[tuple[int, int]]:   
         """
         A helper function to reconstruct the path from the explored dictionary
         :param explored [dict] The dictionary of explored nodes
@@ -487,10 +499,13 @@ class PathPlanner:
         :return        [list[tuple(int, int)]] The Optimal Path from start to goal.
         """
         cords = goal
+        ts=goalts
         path = []
+        rospy.loginfo('Reconstructing path')
+        # print(explored.keys())
         # Loops backwards through the explored dictionary to reconstruct the path
         while cords != start:
-            element = explored[cords]
+            element = explored[(cords, ts)]
             path = [cords] + path
             cords = element[1]
             if cords == None:

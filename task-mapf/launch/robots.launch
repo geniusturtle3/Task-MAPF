@@ -66,24 +66,24 @@
   </group>
 
   <!-- BEGIN ROBOT 7-->
-  <group ns="robot_7">
+  <!-- <group ns="robot_7">
     <param name="tf_prefix" value="robot_7" />
     <include file="$(find task-mapf)/launch/one_robot.launch" >
       <arg name="init_pose" value="-x .5 -y -1.5 -z 0" />
       <arg name="robot_name"  value="Robot7" />
       <arg name="robottf" value="robot_7"/>
     </include>
-  </group>
+  </group> -->
 
   <!-- BEGIN ROBOT 8-->
-  <group ns="robot_8">
+  <!-- <group ns="robot_8">
     <param name="tf_prefix" value="robot_8" />
     <include file="$(find task-mapf)/launch/one_robot.launch" >
       <arg name="init_pose" value="-x 1.5 -y -.5 -z 0" />
       <arg name="robot_name"  value="Robot8" />
       <arg name="robottf" value="robot_8"/>
     </include>
-  </group>
+  </group> -->
 
   
 

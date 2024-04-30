@@ -9,8 +9,8 @@ Panels:
         - /Grid1
         - /Map1/Position1
         - /GridCells1
-        - /GridCells2
         - /Path1/Offset1
+        - /GridCells2
       Splitter Ratio: 0.5
     Tree Height: 1079
   - Class: rviz/Selection
@@ -77,15 +77,6 @@ Visualization Manager:
       Value: true
     - Alpha: 1
       Class: rviz/GridCells
-      Color: 172; 43; 55
-      Enabled: true
-      Name: GridCells
-      Queue Size: 10
-      Topic: /path_planner/cspace
-      Unreliable: false
-      Value: true
-    - Alpha: 1
-      Class: rviz/GridCells
       Color: 252; 172; 0
       Enabled: true
       Name: GridCells
@@ -115,6 +106,15 @@ Visualization Manager:
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
       Topic: /apath
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 172; 43; 55
+      Enabled: true
+      Name: GridCells
+      Queue Size: 10
+      Topic: /path_planner/cspace
       Unreliable: false
       Value: true
     - Alpha: 1

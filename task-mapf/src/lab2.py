@@ -40,9 +40,8 @@ class Lab2:
         self.reqCount=0
         self.newGoalPub=rospy.Publisher('/robot_'+str(self.number)+'/newGoal',Odometry,queue_size=10)
         self.replanPub=rospy.Publisher('/robot_'+str(self.number)+'/replan',Odometry,queue_size=10)
-        rospy.Subscriber('/initialpose',
-                         PoseWithCovarianceStamped, self.send_status)
-        
+        self.runRobot = True
+        rospy.Subscriber('/robot_'+str(self.number)+'/stopRobot',String,self.stopRobot)       
         
 
         self.px,self.py,self.ptheta=0,0,0
@@ -61,14 +60,13 @@ class Lab2:
         self.isLocalized = False
         self.prevError = 0
         self.prevOdom=None
-        # msg=String()
-        # msg.data="awaiting_"+str(self.number)
-        # self.newGoalPub.publish(msg)
-        
+
+
 
         # pass # delete this when you implement your code
 
-    
+    def stopRobot(self,msg):
+        self.runRobot = False
 
     def send_status(self,msg):
         msg=self.prevOdom
@@ -106,6 +104,7 @@ class Lab2:
         self.execute_plan(path)
 
     def execute_plan(self, msg:Path):
+        self.runRobot = True
         self.reqCount+=1
         print(self.reqCount%2,self.number)
         if True:#self.reqCount%2==self.number%2:
@@ -123,16 +122,14 @@ class Lab2:
                 msg=self.prevOdom
                 self.replanPub.publish(msg)
 
-            if self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
+            if not self.runRobot:
+                return
+            elif self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
                 #if we fail to reach goal have global manager send another path to same goal
                 rospy.loginfo("Robot "+str(self.number)+" failed driving to goal")
                 msg=self.prevOdom
                 self.replanPub.publish(msg)
-            else:
-                #if reach send to global manager to send a new path with new goal
-                rospy.loginfo("Robot "+str(self.number)+" finished driving to goal")
-                msg=self.prevOdom
-                self.newGoalPub.publish(msg)
+           
               
 
     def pure_pursuit(self, path: Path, tolerance: float = 0.14, earlyExit: bool = False):
@@ -171,7 +168,7 @@ class Lab2:
         startTime=rospy.get_time()
         isDone = False
         # rospy.loginfo("Starting Pure Pursuit "+str(self.number))
-        while True:
+        while self.runRobot:
             # Calls findLookaheadPoint function to find the desired lookahead
             #   waypoint and saves it to chosenWaypoint.
             # prevLookaheadIndex = self.findLookaheadPoint(
@@ -291,6 +288,7 @@ class Lab2:
             while not self.updateOdom and (rospy.get_time() - self.lastPPseconds) < 0.25:
                 rospy.sleep(0.005)
             rospy.sleep(0.005)
+        self.send_speed(0, 0)
 
 
     def findLookaheadPoint(self, path: Path, prevLookaheadIndex: int) -> int:

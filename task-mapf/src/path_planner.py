@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import numpy as np
 import cv2
-import copy
+from copy import deepcopy
 import rospy
 from nav_msgs.srv import GetPlan, GetMap
 from nav_msgs.msg import GridCells, OccupancyGrid, Path
@@ -47,6 +47,7 @@ class PathPlanner:
         rospy.loginfo("Path planner node ready")
         self.map=self.request_map()
         self.cspaced=self.calc_cspace(self.map, 1)
+        self.baseCspaced=deepcopy(self.cspaced)
 
 
 
@@ -126,7 +127,7 @@ class PathPlanner:
         gridPos=(p[0]*cellSize,p[1]*cellSize)
         origin_quat=mapdata.info.origin.orientation
         (roll, pitch, yaw) = euler_from_quaternion([origin_quat.x, origin_quat.y, origin_quat.z, origin_quat.w])
-        origin_pos=copy.deepcopy(mapdata.info.origin.position)
+        origin_pos=deepcopy(mapdata.info.origin.position)
         origin_rot=np.array([[math.cos(yaw), -math.sin(yaw)],
                              [math.sin(yaw),  math.cos(yaw)]])
         worldPosArr=np.add(np.matmul(origin_rot,np.vstack(np.array([gridPos[0],gridPos[1]]))),np.vstack(np.array([origin_pos.x,origin_pos.y])))
@@ -135,9 +136,6 @@ class PathPlanner:
         worldPoint.y=worldPosArr[1]+cellSize/2
         
         return worldPoint
-        
-
-
         
     @staticmethod
     def world_to_grid(mapdata: OccupancyGrid, wp: Point) -> [int, int]:
@@ -160,9 +158,7 @@ class PathPlanner:
         gridx=int((gridPoint[0])/cellSize)
         gridy=int((gridPoint[1])/cellSize)
         return (gridx, gridy)       
-
-
-        
+   
     @staticmethod
     def path_to_poses(mapdata: OccupancyGrid, path: [[int, int]]) -> [PoseStamped]:
         """
@@ -174,10 +170,7 @@ class PathPlanner:
 
         # REQUIRED CREDIT
         #TODO!!!!!!!!!
-        pass
-        
-
-    
+        pass  
 
     @staticmethod
     def is_cell_walkable(mapdata:OccupancyGrid, p: [int, int]) -> bool:
@@ -196,10 +189,7 @@ class PathPlanner:
             return False
         val = mapdata.data[PathPlanner.grid_to_index(mapdata, p)]
         # print(p,val)
-        return val < 100 and val != -1
-        
-
-               
+        return val < 100 and val != -1         
 
     @staticmethod
     def neighbors_of_4(mapdata: OccupancyGrid, p: [int, int]) -> [[int, int]]:
@@ -220,8 +210,6 @@ class PathPlanner:
             walkable_neighbors.append((p[0], p[1]+1))
         return walkable_neighbors
 
-    
-    
     @staticmethod
     def neighbors_of_8(mapdata: OccupancyGrid, p: [int, int]) -> [[int, int]]:
         """
@@ -297,7 +285,7 @@ class PathPlanner:
         # get the robot radius, convert to cell count
         # add 25% padding to the radius
         robot_radius_cells = math.ceil(
-            (0.210 * 0.5*paddingVal) / mapdata.info.resolution)
+            (0.178 * 0.5*paddingVal) / mapdata.info.resolution)
         print(
             f"The robot's radius is {robot_radius_cells} map cells wide (Resolution: {mapdata.info.resolution})")
         additional_clearance_cells = 0  # Adjust as needed for additional clearance
@@ -343,12 +331,12 @@ class PathPlanner:
         return newmapdata
     
     @staticmethod
-    def calc_robots(mapdata: OccupancyGrid, px: list[float], py: list[float], paddingVal: float = 2) -> OccupancyGrid:
+    def calc_robots(mapdata: OccupancyGrid, px: list[float], py: list[float], paddingVal: float = 1) -> OccupancyGrid:
         for i in range(len(px)):
             cellCord=PathPlanner.world_to_grid(mapdata,Point(px[i],py[i],0))
             mapthedata=list(mapdata.data)
             robot_radius_cells = math.ceil(
-                (0.210 * 0.5*paddingVal) / mapdata.info.resolution)
+                (0.178 * 0.5*paddingVal) / mapdata.info.resolution)
             
             mapthedata[PathPlanner.grid_to_index(mapdata,cellCord)]=100
             cellsBlocked=PathPlanner.neighbors_within_dist(mapdata,cellCord,robot_radius_cells)
@@ -401,7 +389,7 @@ class PathPlanner:
         return newmapdata
 
     @staticmethod
-    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid, px: list[float]=None, py: list[float]=None) -> list[tuple[int, int]]:
+    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid=None) -> list[tuple[int, int]]:
         """
         Calculates the Optimal path using the A* algorithm.
         Publishes the list of cells that were added to the original map.

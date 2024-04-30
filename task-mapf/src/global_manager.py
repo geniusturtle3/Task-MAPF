@@ -61,6 +61,11 @@ class GlobalManager:
         self.isPlanned = [False, False, False, False, False, False, False, False]
         self.unplannedRobots = PriorityQueue()
 
+        self.publish_cspace()
+
+        
+
+    def publish_cspace(self):
         rospy.loginfo("publishing cspace")
         cspace = GridCells()
         cspace.header.frame_id = "map"
@@ -75,6 +80,7 @@ class GlobalManager:
                     self.cspaced, (i % self.cspaced.info.width, int(i / self.cspaced.info.width))))
 
         self.cspace_pub.publish(cspace)
+
 
     def update_odometry(self, msg: Odometry):
         """
@@ -114,19 +120,14 @@ class GlobalManager:
         while len(goalPoint)==0:
             tempPoint=random.choice(opencells)
             gridPoint=PathPlanner.index_to_grid(mapdata,tempPoint)
-            path=PathPlanner.a_star(mapdata,start,gridPoint,self.gradSpace)
+            path=PathPlanner.a_star(mapdata,start,gridPoint)
             if len(path)>0:
                 goalPoint=gridPoint
                 goalTime = rospy.get_time()+random.randint(50,200)+6.9
                 self.goalPoints[robot] = (robot, goalTime, goalPoint)
         
 
-        # path_msg = PoseStamped()
-        # worldpoint=PathPlanner.grid_to_world(mapdata,goalPoint)
-
-        # path_msg.header=self.odomHeader
-        # path_msg.header.frame_id="map"
-        # path_msg.pose.position=worldpoint
+        
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.gridPaths[robot-1] = path
         self.pathMessages[robot-1] = path_msg
@@ -143,10 +144,11 @@ class GlobalManager:
     def replanInitialPaths(self):
         newmap=PathPlanner.calc_robots(self.map,self.px,self.py)
         newcspace=PathPlanner.calc_cspace(newmap)
-        self.cspaced=newcspace
+        self.cspaced=newcspace 
+        self.publish_cspace()
         for robot in range(1,self.numRobots+1):
             start = [self.px[robot-1], self.py[robot-1]]
-            self.gridPaths[robot-1] = PathPlanner.a_star(start,self.goalPoints[robot][2],self.cspaced)
+            self.gridPaths[robot-1] = PathPlanner.a_star(self.cspaced,start,self.goalPoints[robot][2])
             self.pathMessages[robot-1] = PathPlanner.path_to_message(self.cspaced,self.gridPaths[robot-1])
         self.prioritizeRobots()
 

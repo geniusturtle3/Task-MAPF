@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import numpy as np
 import cv2
-import copy
+from copy import deepcopy
 import rospy
 from nav_msgs.srv import GetPlan, GetMap
 from nav_msgs.msg import GridCells, OccupancyGrid, Path
@@ -47,6 +47,7 @@ class PathPlanner:
         rospy.loginfo("Path planner node ready")
         self.map=self.request_map()
         self.cspaced=self.calc_cspace(self.map, 1)
+        self.baseCspaced=deepcopy(self.cspaced)
 
 
 
@@ -68,8 +69,6 @@ class PathPlanner:
         :return  [(int, int)] The cell coordinate.
         """
         return (i % mapdata.info.width, int(i / mapdata.info.width))
-
-
 
     @staticmethod
     def euclidean_distance(p1: [float, float], p2: [float, float]) -> float:
@@ -94,9 +93,21 @@ class PathPlanner:
         point2 = PathPlanner.index_to_grid(mapdata, p2)
 
         return PathPlanner.euclidean_distance(point1, point2)
-
-        
-
+    
+    @staticmethod
+    def path_length(mapdata: OccupancyGrid, path: Path) -> float:
+        """
+        Calculates the length of a path in the occupancy grid.
+        :param mapdata [OccupancyGrid] The map information.
+        :param path    [(int)]         The path as a list of indices.
+        :return        [float]         The length of the path.
+        """
+        length = 0
+        for i in range(len(path.poses) - 1):
+            p1 = [path.poses[i].pose.position.x, path.poses[i].pose.position.y]
+            p2 = [path.poses[i+1].pose.position.x, path.poses[i+1].pose.position.y]
+            length += PathPlanner.euclidean_distance(p1, p2)
+        return length
 
     @staticmethod
     def grid_to_world(mapdata: OccupancyGrid, p: [int, int]) -> Point:
@@ -111,7 +122,7 @@ class PathPlanner:
         gridPos=(p[0]*cellSize,p[1]*cellSize)
         origin_quat=mapdata.info.origin.orientation
         (roll, pitch, yaw) = euler_from_quaternion([origin_quat.x, origin_quat.y, origin_quat.z, origin_quat.w])
-        origin_pos=copy.deepcopy(mapdata.info.origin.position)
+        origin_pos=deepcopy(mapdata.info.origin.position)
         origin_rot=np.array([[math.cos(yaw), -math.sin(yaw)],
                              [math.sin(yaw),  math.cos(yaw)]])
         worldPosArr=np.add(np.matmul(origin_rot,np.vstack(np.array([gridPos[0],gridPos[1]]))),np.vstack(np.array([origin_pos.x,origin_pos.y])))
@@ -120,9 +131,6 @@ class PathPlanner:
         worldPoint.y=worldPosArr[1]+cellSize/2
         
         return worldPoint
-        
-
-
         
     @staticmethod
     def world_to_grid(mapdata: OccupancyGrid, wp: Point) -> [int, int]:
@@ -145,9 +153,7 @@ class PathPlanner:
         gridx=int((gridPoint[0])/cellSize)
         gridy=int((gridPoint[1])/cellSize)
         return (gridx, gridy)       
-
-
-        
+   
     @staticmethod
     def path_to_poses(mapdata: OccupancyGrid, path: [[int, int]]) -> [PoseStamped]:
         """
@@ -159,10 +165,7 @@ class PathPlanner:
 
         # REQUIRED CREDIT
         #TODO!!!!!!!!!
-        pass
-        
-
-    
+        pass  
 
     @staticmethod
     def is_cell_walkable(mapdata:OccupancyGrid, p: [int, int]) -> bool:
@@ -179,12 +182,11 @@ class PathPlanner:
         
         if p[0] < 0 or p[0] >= width or p[1] < 0 or p[1] >= height:
             return False
-        val = mapdata.data[PathPlanner.grid_to_index(mapdata, p)]
-        # print(p,val)
-        return val < 100 and val != -1
+        index=PathPlanner.grid_to_index(mapdata,p)
         
-
-               
+        val = mapdata.data[index]
+        # print(p,val)
+        return val < 100 and val != -1         
 
     @staticmethod
     def neighbors_of_4(mapdata: OccupancyGrid, p: [int, int]) -> [[int, int]]:
@@ -205,8 +207,6 @@ class PathPlanner:
             walkable_neighbors.append((p[0], p[1]+1))
         return walkable_neighbors
 
-    
-    
     @staticmethod
     def neighbors_of_8(mapdata: OccupancyGrid, p: [int, int]) -> [[int, int]]:
         """
@@ -282,7 +282,7 @@ class PathPlanner:
         # get the robot radius, convert to cell count
         # add 25% padding to the radius
         robot_radius_cells = math.ceil(
-            (0.210 * 0.5*paddingVal) / mapdata.info.resolution)
+            (0.178 * 0.5*paddingVal) / mapdata.info.resolution)
         print(
             f"The robot's radius is {robot_radius_cells} map cells wide (Resolution: {mapdata.info.resolution})")
         additional_clearance_cells = 0  # Adjust as needed for additional clearance
@@ -326,6 +326,32 @@ class PathPlanner:
 
         # Return the C-space
         return newmapdata
+    
+    @staticmethod
+    def calc_robots(mapdata: OccupancyGrid, px: list[float], py: list[float], paddingVal: float = 2, ignoreRobot=-1) -> OccupancyGrid:
+        mapthedata=list(mapdata.data)
+        robot_radius_cells = math.ceil(
+                    (0.178 * 0.5) / mapdata.info.resolution)
+        robot_radius_cells_padded = math.ceil(
+                    (0.178 * 0.5*paddingVal) / mapdata.info.resolution)
+        for i in range(len(px)):
+            if i!=ignoreRobot-1:
+                cellCord=PathPlanner.world_to_grid(mapdata,Point(px[i],py[i],0))               
+                mapthedata[PathPlanner.grid_to_index(mapdata,cellCord)]=100
+                cellsBlocked=PathPlanner.neighbors_within_dist(mapdata,cellCord,robot_radius_cells_padded)
+                for cell in cellsBlocked:
+                    mapthedata[PathPlanner.grid_to_index(mapdata,cell)]=100
+            else:
+                cellCord=PathPlanner.world_to_grid(mapdata,Point(px[i],py[i],0))
+                mapthedata[PathPlanner.grid_to_index(mapdata,cellCord)]=0
+                cellsBlocked=PathPlanner.neighbors_within_dist(mapdata,cellCord,robot_radius_cells)
+                for cell in cellsBlocked:
+                    mapthedata[PathPlanner.grid_to_index(mapdata,cell)]=0
+        mapdata.data=tuple(mapthedata)  
+           
+       
+        return mapdata
+
 
     @staticmethod
     def calc_gradspace(mapdata: OccupancyGrid, padding: int = 2) -> OccupancyGrid:
@@ -370,7 +396,7 @@ class PathPlanner:
         return newmapdata
 
     @staticmethod
-    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid=None) -> list[tuple[int, int]]:
+    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid=None,otherPaths=None) -> list[tuple[int, int]]:
         """
         Calculates the Optimal path using the A* algorithm.
         Publishes the list of cells that were added to the original map.
@@ -379,18 +405,31 @@ class PathPlanner:
         :param goal [int]           The target grid location to pathfind to.
         :return        [list[tuple(int, int)]] The Optimal Path from start to goal.
         """
-        # rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" %
-        #               (start[0], start[1], goal[0], goal[1]))
+        robot_radius_cells = math.ceil(
+                    (0.178 * 0.5) / mapdata.info.resolution)
+
+        rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" %
+                      (start[0], start[1], goal[0], goal[1]))
 
         # Check if start and goal are walkable
-
+        # startindex=PathPlanner.grid_to_index(mapdata,start)
+        # print(start,startindex)
         if (not PathPlanner.is_cell_walkable(mapdata, start)):
             # print(mapdata.data[self.grid_to_index(mapdata,start)])
             rospy.loginfo('start blocked')
+            i=1
+            newstart=start
+            while not PathPlanner.is_cell_walkable(mapdata, newstart):
+                newstart=PathPlanner.neighbors_within_dist(mapdata,start,i)[0]
+                i+=1
+                if i>robot_radius_cells:
+                    rospy.loginfo('no start')
+                    return []
 
         if (not PathPlanner.is_cell_walkable(mapdata, goal)):
             # print(mapdata.data[self.grid_to_index(mapdata,goal)])
             rospy.loginfo('goal blocked')
+            return []
 
         # Priority queue for the algorithm
         q = PriorityQueue()
@@ -401,8 +440,10 @@ class PathPlanner:
         explored = {}
         exppoints = []
         wvpoint = []
+        
+        checkPaths=otherPaths!=None
         checkFat=gradSpace!=None
-        q.put((start, None, 0), PathPlanner.euclidean_distance(start, goal))
+        q.put((start, None, 0,0), PathPlanner.euclidean_distance(start, goal))
         while not q.empty():
             element = q.get()
             cords = element[0]
@@ -411,18 +452,19 @@ class PathPlanner:
                 prev = cords
             heading = math.atan2(cords[1]-prev[1], cords[0]-prev[0])
             g = element[2]  # cost sof far at this element
-            explored[cords] = element
+            ts = element[3] # time step
+            explored[(cords[0],cords[1])] = element
             exppoints.append(cords)
 
             if cords == goal:
+                goalts=ts
                 # Once we've hit the goal, reconstruct the path and then return it
-                return PathPlanner.reconstructPath(explored, start, goal)
+                return PathPlanner.reconstructPath(explored, start, goal,goalts)
 
             neighbors = PathPlanner.neighbors_of_8(mapdata, cords)
 
             for i in range(len(neighbors)):
                 neighbor = neighbors[i]
-                # print(neighbor,neighbors)
                 manhatdis = abs(neighbor[0]-cords[0])+abs(neighbor[1]-cords[1])
                 if manhatdis > 1:  # Oridinal Neighbors
                     gfactor = 1.4
@@ -433,6 +475,7 @@ class PathPlanner:
                 turnAngle = math.fmod(math.fmod(newHeading-heading, math.pi*2)+math.pi*2, math.pi*2)
                 turningFactor = 180/math.pi*turnAngle*.01
                 cspaceFactor = 0
+                skip=False
                 if checkFat:
                     dis = gradSpace.data[PathPlanner.grid_to_index(gradSpace, neighbor)]
                     
@@ -440,20 +483,31 @@ class PathPlanner:
                         cspaceFactor = (gfactor*(16-dis)**2)*.5
                     elif dis < 20:
                         cspaceFactor = gfactor*(20-dis)*.05
-    
+                if checkPaths:         
+                    for path in otherPaths:
+                        if ts+1<len(path):
+                            pathpoint = path[ts+1]
+                        elif len(path)>0:
+                            pathpoint = path[-1]
+                        else:
+                            pathpoint = [math.inf,math.inf]
+                        dis=PathPlanner.euclidean_distance(neighbor,pathpoint) 
+                        if dis < robot_radius_cells*4:
+                            skip=True
+                            break                  
 
-                # print(gfactor)
-                if explored.get(neighbor) is None or explored.get(neighbor)[2] > g+gfactor+cspaceFactor:
+                # print(explored)
+                if (not skip) and (explored.get((neighbor[0],neighbor[1])) is None or explored.get((neighbor[0],neighbor[1]))[2] > g+gfactor+cspaceFactor):
                     f = g+gfactor + \
                         PathPlanner.euclidean_distance(neighbor, goal) + cspaceFactor + turningFactor
                     # print((neighbor,cords,g+1),f)
-                    q.put((neighbor, cords, g+gfactor+cspaceFactor+turningFactor), f)
+                    q.put((neighbor, cords, g+gfactor+cspaceFactor+turningFactor,ts+1), f)
 
         rospy.loginfo('Could not reach goal')
         return []
 
     @staticmethod
-    def reconstructPath(explored: dict, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:   
+    def reconstructPath(explored: dict, start: tuple[int, int], goal: tuple[int, int], goalts) -> list[tuple[int, int]]:   
         """
         A helper function to reconstruct the path from the explored dictionary
         :param explored [dict] The dictionary of explored nodes
@@ -462,12 +516,16 @@ class PathPlanner:
         :return        [list[tuple(int, int)]] The Optimal Path from start to goal.
         """
         cords = goal
+        ts=goalts
         path = []
+        # rospy.loginfo('Reconstructing path')
+        # print(explored.keys())
         # Loops backwards through the explored dictionary to reconstruct the path
         while cords != start:
-            element = explored[cords]
+            element = explored[(cords[0],cords[1])]
             path = [cords] + path
             cords = element[1]
+            ts-=1
             if cords == None:
                 # This should never happen given the way the algorithm is implemented
                 rospy.loginfo('Could not reconstruct')
@@ -528,9 +586,7 @@ class PathPlanner:
             path_msg.poses.append(pose)
 
         return path_msg
-
-
-        
+     
     def plan_path(self, msg):
         """
         Plans a path between the start and goal locations in the requested.
@@ -572,8 +628,10 @@ class PathPlanner:
         return pthmsg
 
     @staticmethod
-    # takes a pose and translates to np array of 4x4 homogenous transformation matrix
     def poseToMatrix(pose:Pose):
+        '''
+        Converts a Pose message to a 4x4 homogenous transformation matrix
+        '''
         quat=pose.orientation
         q1,q2,q3,q0=quat.x,quat.y,quat.z,quat.w
         pos=pose.position
@@ -605,45 +663,10 @@ class PathPlanner:
         """
         self.map = PathPlanner.request_map()
         self.cspaced=self.calc_cspace(self.map, 1.25)
-        self.gradSpace=self.calc_gradspace(self.map)
-        # # Create a GridCells message and publish it
-        # cspace = GridCells()
-        # cspace.header.frame_id = "map"
-        # cspace.cell_width = self.cspaced.info.resolution
-        # cspace.cell_height = self.cspaced.info.resolution
-        # cspace.cells = []
-
-        # for i in range(len(self.cspaced.data)):
-        #     if self.cspaced.data[i] == 100:
-        #         # Publish only the inflated cells
-        #         cspace.cells.append(PathPlanner.grid_to_world(
-        #             self.cspaced, (i % self.cspaced.info.width, int(i / self.cspaced.info.width))))
-                
-        # rospy.loginfo("Publishing C-Space")
-        # PathPlanner.cspace_pub.publish(cspace)
-        # print(self.map)
-        # rospy.loginfo(rospy.get_name()+" Hello")
-        # path=self.optimize_path(self.a_star(self.cspaced,(3,3),(11,9)))
-        # print(path)
-        # pathpoints=[]
-        # for point in path:
-        #     print(point)
-        #     pathpoints.append(self.grid_to_world(self.cspaced,point))
-        
-        # path_msg=GridCells()
-        # path_msg.cell_height=self.cspaced.info.resolution
-        # path_msg.cell_width=self.cspaced.info.resolution
-        # path_msg.header.frame_id="map"
-        # path_msg.cells=pathpoints
-        # self.a_star_pub.publish(path_msg)
-        
-        
-
-        # self.a_star_pub()
+        # self.gradSpace=self.calc_gradspace(self.map)
+       
         rospy.spin()
 
-
-        
 if __name__ == '__main__':
     PathPlanner().run()
 

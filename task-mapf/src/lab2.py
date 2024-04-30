@@ -40,9 +40,8 @@ class Lab2:
         self.reqCount=0
         self.newGoalPub=rospy.Publisher('/robot_'+str(self.number)+'/newGoal',Odometry,queue_size=10)
         self.replanPub=rospy.Publisher('/robot_'+str(self.number)+'/replan',Odometry,queue_size=10)
-        rospy.Subscriber('/initialpose',
-                         PoseWithCovarianceStamped, self.send_status)
-        
+        self.runRobot = True
+        rospy.Subscriber('/robot_'+str(self.number)+'/stopRobot',String,self.stopRobot)       
         
 
         self.px,self.py,self.ptheta=0,0,0
@@ -51,8 +50,8 @@ class Lab2:
 
         self.useOdom = True
         # a value of 0.45 meters seem to smooth out things while keeping the robot fairly on track
-        self.indexLookahead = 6  # 6 cells lookahead
-        self.lookaheadDistance = self.indexLookahead*0.025  # meters
+        self.indexLookahead = 12  # 6 cells lookahead
+        self.lookaheadDistance = self.indexLookahead*0.015  # meters
         self.maximumVelocity = 0.4  # meters per second
         self.maximumAngVelocity = 5.5  # rad per second
         self.turnK=1.97
@@ -61,14 +60,13 @@ class Lab2:
         self.isLocalized = False
         self.prevError = 0
         self.prevOdom=None
-        # msg=String()
-        # msg.data="awaiting_"+str(self.number)
-        # self.newGoalPub.publish(msg)
-        
+
+
 
         # pass # delete this when you implement your code
 
-    
+    def stopRobot(self,msg):
+        self.runRobot = False
 
     def send_status(self,msg):
         msg=self.prevOdom
@@ -106,6 +104,7 @@ class Lab2:
         self.execute_plan(path)
 
     def execute_plan(self, msg:Path):
+        self.runRobot = True
         self.reqCount+=1
         print(self.reqCount%2,self.number)
         if True:#self.reqCount%2==self.number%2:
@@ -116,21 +115,23 @@ class Lab2:
             # Execute the path        
             self.pure_pursuit(planToDrive, tolerance=tolerance)
             #lost path replanning
-            if len(planToDrive.poses)>0:
+            if not len(planToDrive.poses)==0:
                 goal=planToDrive.poses[-1]
+            else:
+                rospy.loginfo("Robot "+str(self.number)+" no path given")
+                msg=self.prevOdom
+                self.replanPub.publish(msg)
+                self.runRobot=False
 
-
-                if self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
-                    #if we fail to reach goal have global manager send another path to same goal
-                    rospy.loginfo("Robot "+str(self.number)+" failed driving to goal")
-                    msg=self.prevOdom
-                    self.replanPub.publish(msg)
-                else:
-                    #if reach send to global manager to send a new path with new goal
-                    rospy.loginfo("Robot "+str(self.number)+" finished driving to goal")
-                    msg=self.prevOdom
-                    self.newGoalPub.publish(msg)
-            else: self.send_status()
+            if not self.runRobot:
+                return
+            elif self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
+                self.smooth_drive(-.15,.2)
+                #if we fail to reach goal have global manager send another path to same goal
+                rospy.loginfo("Robot "+str(self.number)+" failed driving to goal")
+                msg=self.prevOdom
+                self.replanPub.publish(msg)
+           
               
 
     def pure_pursuit(self, path: Path, tolerance: float = 0.14, earlyExit: bool = False):
@@ -169,7 +170,7 @@ class Lab2:
         startTime=rospy.get_time()
         isDone = False
         # rospy.loginfo("Starting Pure Pursuit "+str(self.number))
-        while True:
+        while self.runRobot:
             # Calls findLookaheadPoint function to find the desired lookahead
             #   waypoint and saves it to chosenWaypoint.
             # prevLookaheadIndex = self.findLookaheadPoint(
@@ -289,6 +290,7 @@ class Lab2:
             while not self.updateOdom and (rospy.get_time() - self.lastPPseconds) < 0.25:
                 rospy.sleep(0.005)
             rospy.sleep(0.005)
+        self.send_speed(0, 0)
 
 
     def findLookaheadPoint(self, path: Path, prevLookaheadIndex: int) -> int:
@@ -379,24 +381,27 @@ class Lab2:
         """
         ### EXTRA CREDIT
         # it shall be a trapezoidal profile generator
+        sign=math.copysign(1,distance)
         stop_error = 0.02   # 2cm
         update_time = 0.05  # [s]
         initial_pose = (self.px, self.py, self.ptheta)
 
-        max_accel = 0.05     # [m/s^2]
+        max_accel = 0.05*sign    # [m/s^2]
         current_speed = 0.0 # [m/s]
         is_decelerating = False
+
+        back=math.copysign(1,distance)
         
         # simplified version
-        while(self.pose_distance(initial_pose) < (distance - stop_error)):
+        while(self.pose_distance(initial_pose) < abs(distance - stop_error)):
             #accelerate until max speed is reached or it is time to decelerate
             if not is_decelerating:
-                if current_speed < linear_speed:
+                if abs(current_speed) < abs(linear_speed):
                     current_speed += max_accel * update_time
                 
                 distance_to_switch = (current_speed)**2/(2*max_accel) * 1.07
                 # distance remaining < distance to switch
-                if (distance - self.pose_distance(initial_pose)) < distance_to_switch:
+                if abs(distance - self.pose_distance(initial_pose)) < distance_to_switch:
                     is_decelerating = True
             
             elif is_decelerating and current_speed > 0.005:
@@ -424,10 +429,10 @@ class Lab2:
 
 
         # take care of large angle
-        while angle >= 2*math.pi:
-            angle -= 2*math.pi
-        while angle <= -2*math.pi:
-            angle += 2*math.pi
+        if angle >= 2*math.pi:
+            angle=angle%(2*math.pi)
+        if angle <= -2*math.pi:
+            angle=angle%(2*math.pi)
 
         #make all turns smaller than pi
         if angle > math.pi:
@@ -439,7 +444,7 @@ class Lab2:
         if angle < 0:
             max_accel = -max_accel  # this effectively swaps the speed sign
             # aspeed = -aspeed
-
+    
         #print(angle*180/math.pi)
         angle = abs(angle)
 
@@ -458,8 +463,6 @@ class Lab2:
             
             elif is_decelerating and abs(current_speed) > 0.05:
                 current_speed -= max_accel * update_time
-            
-             
 
             self.send_speed(0.0,current_speed)
             dist_traveled = abs((self.ptheta - initial_pose[2]))
@@ -467,8 +470,6 @@ class Lab2:
             #     dist_traveled = 2*math.pi - dist_traveled
             #print(dist_traveled*180/math.pi)
             rospy.sleep(update_time)
-            # if self.number==1:
-                # print(dist_traveled*180/math.pi)
 
         self.send_speed(0.0, 0.0) # stop the robot
 

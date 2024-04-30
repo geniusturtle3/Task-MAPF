@@ -23,10 +23,11 @@ class PriorityQueue:
         for i in range(0, len(self.elements)):
             it = self.elements[i]
             if (it[1][0] == element[0]):
-                if (it[0] > priority):
-                    self.elements[i] = (priority, element)
-                    heapq.heapify(self.elements)
-                return
+                # if it[1][3] == element[3]:
+                    if (it[0] > priority):
+                        self.elements[i] = (priority, element)
+                        heapq.heapify(self.elements)
+                    return
         heapq.heappush(self.elements, (priority, element))
 
     def get(self):

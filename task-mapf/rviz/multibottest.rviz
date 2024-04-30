@@ -7,21 +7,10 @@ Panels:
         - /Global Options1
         - /Status1
         - /Grid1
-        - /RobotModel1
-        - /Map1
         - /Map1/Position1
-        - /Map TF1
         - /GridCells1
-        - /Path1
         - /Path1/Offset1
         - /GridCells2
-        - /RobotModel2
-        - /RobotModel3
-        - /RobotModel4
-        - /RobotModel5
-        - /RobotModel6
-        - /RobotModel7
-        - /RobotModel8
       Splitter Ratio: 0.5
     Tree Height: 1079
   - Class: rviz/Selection
@@ -67,55 +56,6 @@ Visualization Manager:
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
       Value: true
-    - Alpha: 1
-      Class: rviz/RobotModel
-      Collision Enabled: false
-      Enabled: true
-      Links:
-        All Links Enabled: true
-        Expand Joint Details: false
-        Expand Link Details: false
-        Expand Tree: false
-        Link Tree Style: Links in Alphabetic Order
-        base_footprint:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        base_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        base_scan:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        caster_back_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        imu_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        wheel_left_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        wheel_right_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-      Name: RobotModel
-      Robot Description: robot_description
-      TF Prefix: robot_1
-      Update Interval: 0
-      Value: true
-      Visual Enabled: true
     - Alpha: 0.699999988079071
       Class: rviz/Map
       Color Scheme: map
@@ -137,11 +77,11 @@ Visualization Manager:
       Value: true
     - Alpha: 1
       Class: rviz/GridCells
-      Color: 172; 43; 55
+      Color: 252; 172; 0
       Enabled: true
       Name: GridCells
       Queue Size: 10
-      Topic: /path_planner/cspace
+      Topic: /path_planner/basecspace
       Unreliable: false
       Value: true
     - Alpha: 1
@@ -166,6 +106,15 @@ Visualization Manager:
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
       Topic: /apath
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 172; 43; 55
+      Enabled: true
+      Name: GridCells
+      Queue Size: 10
+      Topic: /path_planner/cspace
       Unreliable: false
       Value: true
     - Alpha: 1
@@ -223,6 +172,55 @@ Visualization Manager:
       Name: RobotModel
       Robot Description: robot_description
       TF Prefix: robot_2
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Alpha: 1
+      Class: rviz/RobotModel
+      Collision Enabled: false
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        base_footprint:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        base_scan:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        caster_back_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        imu_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        wheel_left_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wheel_right_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+      Name: RobotModel
+      Robot Description: robot_description
+      TF Prefix: robot_1
       Update Interval: 0
       Value: true
       Visual Enabled: true
@@ -556,8 +554,8 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 2.216179847717285
-        Y: -4.979682922363281
+        X: -0.04381585121154785
+        Y: -2.6289124488830566
         Z: 0
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806

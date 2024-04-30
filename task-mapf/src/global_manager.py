@@ -22,7 +22,7 @@ from path_planner import PathPlanner
 from priority_queue import PriorityQueue
 
 
-class GobalManager:
+class GlobalManager:
     def __init__(self) -> None:
         "Constructor"
 
@@ -117,7 +117,7 @@ class GobalManager:
             path=PathPlanner.a_star(mapdata,start,gridPoint,self.gradSpace)
             if len(path)>0:
                 goalPoint=gridPoint
-                goalTime = random.randint(50,200)
+                goalTime = rospy.get_time()+random.randint(50,200)+6.9
                 self.goalPoints[robot] = (robot, goalTime, goalPoint)
         
 
@@ -253,4 +253,4 @@ class GobalManager:
 
         
 if __name__ == '__main__':
-    GobalManager().run()
+    GlobalManager().run()

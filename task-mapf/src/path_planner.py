@@ -341,6 +341,21 @@ class PathPlanner:
 
         # Return the C-space
         return newmapdata
+    
+    @staticmethod
+    def calc_robots(mapdata: OccupancyGrid, px: list[float], py: list[float], paddingVal: float = 2) -> OccupancyGrid:
+        for i in range(len(px)):
+            cellCord=PathPlanner.world_to_grid(mapdata,Point(px[i],py[i],0))
+            
+            robot_radius_cells = math.ceil(
+                (0.210 * 0.5*paddingVal) / mapdata.info.resolution)
+            
+            mapdata.data[PathPlanner.grid_to_index(mapdata,cellCord)]=100
+            cellsBlocked=PathPlanner.neighbors_within_dist(mapdata,cellCord,robot_radius_cells)
+            for cell in cellsBlocked:
+                mapdata.data[PathPlanner.grid_to_index(mapdata,cell)]=100
+        return mapdata
+
 
     @staticmethod
     def calc_gradspace(mapdata: OccupancyGrid, padding: int = 2) -> OccupancyGrid:
@@ -385,7 +400,7 @@ class PathPlanner:
         return newmapdata
 
     @staticmethod
-    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid) -> list[tuple[int, int]]:
+    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid, px: list[float]=None, py: list[float]=None) -> list[tuple[int, int]]:
         """
         Calculates the Optimal path using the A* algorithm.
         Publishes the list of cells that were added to the original map.

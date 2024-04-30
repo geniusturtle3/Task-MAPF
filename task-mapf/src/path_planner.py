@@ -330,21 +330,25 @@ class PathPlanner:
     @staticmethod
     def calc_robots(mapdata: OccupancyGrid, px: list[float], py: list[float], paddingVal: float = 2, ignoreRobot=-1) -> OccupancyGrid:
         mapthedata=list(mapdata.data)
+        robot_radius_cells = math.ceil(
+                    (0.178 * 0.5) / mapdata.info.resolution)
+        robot_radius_cells_padded = math.ceil(
+                    (0.178 * 0.5*paddingVal) / mapdata.info.resolution)
         for i in range(len(px)):
             if i!=ignoreRobot-1:
-                cellCord=PathPlanner.world_to_grid(mapdata,Point(px[i],py[i],0))
-                robot_radius_cells = math.ceil(
-                    (0.178 * 0.5*paddingVal) / mapdata.info.resolution)
-                
+                cellCord=PathPlanner.world_to_grid(mapdata,Point(px[i],py[i],0))               
                 mapthedata[PathPlanner.grid_to_index(mapdata,cellCord)]=100
-                cellsBlocked=PathPlanner.neighbors_within_dist(mapdata,cellCord,robot_radius_cells)
+                cellsBlocked=PathPlanner.neighbors_within_dist(mapdata,cellCord,robot_radius_cells_padded)
                 for cell in cellsBlocked:
                     mapthedata[PathPlanner.grid_to_index(mapdata,cell)]=100
+            else:
+                cellCord=PathPlanner.world_to_grid(mapdata,Point(px[i],py[i],0))
+                mapthedata[PathPlanner.grid_to_index(mapdata,cellCord)]=0
+                cellsBlocked=PathPlanner.neighbors_within_dist(mapdata,cellCord,robot_radius_cells)
+                for cell in cellsBlocked:
+                    mapthedata[PathPlanner.grid_to_index(mapdata,cell)]=0
         mapdata.data=tuple(mapthedata)  
-        if not ignoreRobot==-1:
-            cellCord=PathPlanner.world_to_grid(mapdata,Point(px[ignoreRobot-1],py[ignoreRobot-1],0))
-            if not PathPlanner.is_cell_walkable(mapdata,cellCord):
-                rospy.loginfo(f"Robot {ignoreRobot} is not in a walkable cell")     
+           
        
         return mapdata
 
@@ -427,7 +431,7 @@ class PathPlanner:
         exppoints = []
         wvpoint = []
         robot_radius_cells = math.ceil(
-                    (0.178 * 0.5) / mapdata.info.resolution)
+                    (0.178 * 0.5)*1.4 / mapdata.info.resolution)
         checkPaths=otherPaths!=None
         checkFat=gradSpace!=None
         q.put((start, None, 0,0), PathPlanner.euclidean_distance(start, goal))
@@ -440,7 +444,7 @@ class PathPlanner:
             heading = math.atan2(cords[1]-prev[1], cords[0]-prev[0])
             g = element[2]  # cost sof far at this element
             ts = element[3] # time step
-            explored[(cords, ts)] = element
+            explored[(cords[0],cords[1])] = element
             exppoints.append(cords)
 
             if cords == goal:
@@ -471,16 +475,19 @@ class PathPlanner:
                     elif dis < 20:
                         cspaceFactor = gfactor*(20-dis)*.05
                 if checkPaths:
+                    
                     for path in otherPaths:
                         if ts+1<len(path):
                             pathpoint = path[ts+1]
-                            cellswithin = PathPlanner.neighbors_within_dist(mapdata, pathpoint, robot_radius_cells)
-                            if neighbor in cellswithin:
-                                skip=True
-                                break                   
+                        else:
+                            pathpoint = path[-1]
+                        cellswithin = PathPlanner.neighbors_within_dist(mapdata, pathpoint, robot_radius_cells)
+                        if neighbor in cellswithin:
+                            skip=True
+                            break                   
 
                 # print(explored)
-                if (not skip) and (explored.get((neighbor,ts+1)) is None or explored.get((neighbor,ts+1))[2] > g+gfactor+cspaceFactor):
+                if (not skip) and (explored.get((neighbor[0],neighbor[1])) is None or explored.get((neighbor[0],neighbor[1]))[2] > g+gfactor+cspaceFactor):
                     f = g+gfactor + \
                         PathPlanner.euclidean_distance(neighbor, goal) + cspaceFactor + turningFactor
                     # print((neighbor,cords,g+1),f)
@@ -501,13 +508,14 @@ class PathPlanner:
         cords = goal
         ts=goalts
         path = []
-        rospy.loginfo('Reconstructing path')
+        # rospy.loginfo('Reconstructing path')
         # print(explored.keys())
         # Loops backwards through the explored dictionary to reconstruct the path
         while cords != start:
-            element = explored[(cords, ts)]
+            element = explored[(cords[0],cords[1])]
             path = [cords] + path
             cords = element[1]
+            ts-=1
             if cords == None:
                 # This should never happen given the way the algorithm is implemented
                 rospy.loginfo('Could not reconstruct')

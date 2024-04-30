@@ -50,7 +50,7 @@ class GlobalManager:
         self.path_pub = rospy.Publisher("/apath", Path, queue_size=0)
         self.cspace_pub = rospy.Publisher("/path_planner/cspace", GridCells, queue_size=10)
         self.cspace_base_pub = rospy.Publisher("/path_planner/basecspace", GridCells, queue_size=10)
-        rospy.Timer(rospy.Duration(30), self.timer_callback)
+        rospy.Timer(rospy.Duration(120), self.timer_callback)
 
         
         # rospy.Subscriber('/initialpose',
@@ -60,7 +60,7 @@ class GlobalManager:
 
         self.px=[0,0,0,0,0,0,0,0]
         self.py=[0,0,0,0,0,0,0,0]
-        self.gridPaths = [None, None, None, None, None, None, None, None]
+        self.gridPaths = [[], [], [], [], [], [], [], []]
         self.pathMessages = [None, None, None, None, None, None, None, None]
         self.goalPoints={}
         self.isPlanned = [False, False, False, False, False, False, False, False]
@@ -74,10 +74,12 @@ class GlobalManager:
         self.baseCspace=deepcopy(self.cspaced)
         self.publish_cspace(self.baseCspace,self.cspace_base_pub)
         self.chooseGoals()
+        rospy.Timer(rospy.Duration(150), self.timer_callback)
         
         
 
     def timer_callback(self, event):
+        rospy.loginfo("Timer callback")
         self.chooseGoals()
         pass
 
@@ -170,13 +172,13 @@ class GlobalManager:
                 goalPoint=gridPoint
                 goalTime = rospy.get_time()+random.randint(50,200)+6.9
                 self.goalPoints[robot] = (robot, goalTime, goalPoint) 
-            else:
-                path=PathPlanner.a_star(self.baseCspace,start,gridPoint)
-                if len(path)>0:
-                    rospy.loginfo("Path found in base cspace Robot "+str(robot))
-                    goalPoint=gridPoint
-                    goalTime = random.randint(50,200)+6.9
-                    self.goalPoints[robot] = (robot, goalTime, goalPoint)
+            # else:
+            #     path=PathPlanner.a_star(self.baseCspace,start,gridPoint)
+            #     if len(path)>0:
+            #         rospy.loginfo("Path found in base cspace Robot "+str(robot))
+            #         goalPoint=gridPoint
+            #         goalTime = random.randint(50,200)+6.9
+            #         self.goalPoints[robot] = (robot, goalTime, goalPoint)
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.gridPaths[robot-1] = path
         self.pathMessages[robot-1] = path_msg
@@ -197,6 +199,7 @@ class GlobalManager:
             if priority > value[1]:
                 priority += self.priorityOffset
             self.unplannedRobots.put(value, priority)
+        
         self.releaseRobots(self.adjustPaths())
 
     def releaseRobots(self, plannedRobots):
@@ -267,12 +270,22 @@ class GlobalManager:
                     return j
         return -1
     
-    def adjustPath(self, robot, index):
-        collisionCell = self.gridPaths[robot-1][index]
-        updatedCell = (collisionCell[0] + random.randint(-10,10), collisionCell[1]+random.randint(-10,10))
-        while not PathPlanner.is_cell_walkable(self.cspaced, updatedCell):
-            updatedCell = (updatedCell[0] + random.randint(-10,10), updatedCell[1]+random.randint(-10,10))
-        self.gridPaths[robot-1][index] = updatedCell
+    def adjustPath(self, robot, plannedRobots):
+        rospy.loginfo("Adjusting path for robot "+str(robot))
+        path = self.gridPaths[robot-1]
+        self.gridPaths[robot-1] = []
+        goal=self.goalPoints[robot][2]
+        pos=Point()
+        pos.x=self.px[robot-1]
+        pos.y=self.py[robot-1]
+        start=PathPlanner.world_to_grid(self.baseCspace,pos)
+        pathstosend =[[], [], [], [], [], [], [], []]
+        for i in plannedRobots:
+            pathstosend[i-1] = self.gridPaths[i-1]
+        newPath = PathPlanner.a_star(self.baseCspace,start,goal,otherPaths=self.gridPaths)
+        self.gridPaths[robot-1] = newPath
+        path_msg = PathPlanner.path_to_message(self.cspaced, newPath)
+        self.pathMessages[robot-1] = path_msg
     
     def adjustPaths(self):
         plannedRobots = []
@@ -280,14 +293,16 @@ class GlobalManager:
         while not self.unplannedRobots.empty():
             robot = self.unplannedRobots.get()
             currentBot = robot[0]
+            # self.adjustPath(currentBot, plannedRobots)
             for i in range(len(plannedRobots)):
                 plannedRobot = plannedRobots[i]
                 collIndex = self.checkPathCollision(self.gridPaths[currentBot-1], self.gridPaths[plannedRobot-1])
                 if collIndex > 0:
-                    self.adjustPath(currentBot, collIndex)
+                    self.adjustPath(currentBot, plannedRobots)
                     i -= 1
-                path_msg = PathPlanner.path_to_message(self.cspaced, self.gridPaths[currentBot-1])
-                self.pathMessages[currentBot-1] = path_msg
+                    break
+            #     path_msg = PathPlanner.path_to_message(self.cspaced, self.gridPaths[currentBot-1])
+            #     self.pathMessages[currentBot-1] = path_msg
             plannedRobots.append(currentBot)
         return plannedRobots
     

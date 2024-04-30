@@ -405,6 +405,9 @@ class PathPlanner:
         :param goal [int]           The target grid location to pathfind to.
         :return        [list[tuple(int, int)]] The Optimal Path from start to goal.
         """
+        robot_radius_cells = math.ceil(
+                    (0.178 * 0.5) / mapdata.info.resolution)
+
         rospy.loginfo("Executing A* from (%d,%d) to (%d,%d)" %
                       (start[0], start[1], goal[0], goal[1]))
 
@@ -414,7 +417,14 @@ class PathPlanner:
         if (not PathPlanner.is_cell_walkable(mapdata, start)):
             # print(mapdata.data[self.grid_to_index(mapdata,start)])
             rospy.loginfo('start blocked')
-            return []
+            i=1
+            newstart=start
+            while not PathPlanner.is_cell_walkable(mapdata, newstart):
+                newstart=PathPlanner.neighbors_within_dist(mapdata,start,i)[0]
+                i+=1
+                if i>robot_radius_cells:
+                    rospy.loginfo('no start')
+                    return []
 
         if (not PathPlanner.is_cell_walkable(mapdata, goal)):
             # print(mapdata.data[self.grid_to_index(mapdata,goal)])
@@ -430,8 +440,7 @@ class PathPlanner:
         explored = {}
         exppoints = []
         wvpoint = []
-        robot_radius_cells = math.ceil(
-                    (0.178 * 0.5)*1.4 / mapdata.info.resolution)
+        
         checkPaths=otherPaths!=None
         checkFat=gradSpace!=None
         q.put((start, None, 0,0), PathPlanner.euclidean_distance(start, goal))
@@ -474,17 +483,18 @@ class PathPlanner:
                         cspaceFactor = (gfactor*(16-dis)**2)*.5
                     elif dis < 20:
                         cspaceFactor = gfactor*(20-dis)*.05
-                if checkPaths:
-                    
+                if checkPaths:         
                     for path in otherPaths:
                         if ts+1<len(path):
                             pathpoint = path[ts+1]
-                        else:
+                        elif len(path)>0:
                             pathpoint = path[-1]
-                        cellswithin = PathPlanner.neighbors_within_dist(mapdata, pathpoint, robot_radius_cells)
-                        if neighbor in cellswithin:
+                        else:
+                            pathpoint = [math.inf,math.inf]
+                        dis=PathPlanner.euclidean_distance(neighbor,pathpoint) 
+                        if dis < robot_radius_cells*4:
                             skip=True
-                            break                   
+                            break                  
 
                 # print(explored)
                 if (not skip) and (explored.get((neighbor[0],neighbor[1])) is None or explored.get((neighbor[0],neighbor[1]))[2] > g+gfactor+cspaceFactor):

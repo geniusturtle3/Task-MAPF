@@ -121,10 +121,12 @@ class Lab2:
                 rospy.loginfo("Robot "+str(self.number)+" no path given")
                 msg=self.prevOdom
                 self.replanPub.publish(msg)
+                self.runRobot=False
 
             if not self.runRobot:
                 return
             elif self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
+                self.smooth_drive(-.15,.2)
                 #if we fail to reach goal have global manager send another path to same goal
                 rospy.loginfo("Robot "+str(self.number)+" failed driving to goal")
                 msg=self.prevOdom
@@ -379,24 +381,27 @@ class Lab2:
         """
         ### EXTRA CREDIT
         # it shall be a trapezoidal profile generator
+        sign=math.copysign(1,distance)
         stop_error = 0.02   # 2cm
         update_time = 0.05  # [s]
         initial_pose = (self.px, self.py, self.ptheta)
 
-        max_accel = 0.05     # [m/s^2]
+        max_accel = 0.05*sign    # [m/s^2]
         current_speed = 0.0 # [m/s]
         is_decelerating = False
+
+        back=math.copysign(1,distance)
         
         # simplified version
-        while(self.pose_distance(initial_pose) < (distance - stop_error)):
+        while(self.pose_distance(initial_pose) < abs(distance - stop_error)):
             #accelerate until max speed is reached or it is time to decelerate
             if not is_decelerating:
-                if current_speed < linear_speed:
+                if abs(current_speed) < abs(linear_speed):
                     current_speed += max_accel * update_time
                 
                 distance_to_switch = (current_speed)**2/(2*max_accel) * 1.07
                 # distance remaining < distance to switch
-                if (distance - self.pose_distance(initial_pose)) < distance_to_switch:
+                if abs(distance - self.pose_distance(initial_pose)) < distance_to_switch:
                     is_decelerating = True
             
             elif is_decelerating and current_speed > 0.005:
@@ -424,10 +429,10 @@ class Lab2:
 
 
         # take care of large angle
-        while angle >= 2*math.pi:
-            angle -= 2*math.pi
-        while angle <= -2*math.pi:
-            angle += 2*math.pi
+        if angle >= 2*math.pi:
+            angle=angle%(2*math.pi)
+        if angle <= -2*math.pi:
+            angle=angle%(2*math.pi)
 
         #make all turns smaller than pi
         if angle > math.pi:
@@ -439,7 +444,7 @@ class Lab2:
         if angle < 0:
             max_accel = -max_accel  # this effectively swaps the speed sign
             # aspeed = -aspeed
-
+    
         #print(angle*180/math.pi)
         angle = abs(angle)
 
@@ -458,8 +463,6 @@ class Lab2:
             
             elif is_decelerating and abs(current_speed) > 0.05:
                 current_speed -= max_accel * update_time
-            
-             
 
             self.send_speed(0.0,current_speed)
             dist_traveled = abs((self.ptheta - initial_pose[2]))

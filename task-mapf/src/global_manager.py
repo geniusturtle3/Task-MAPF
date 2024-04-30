@@ -40,7 +40,7 @@ class GlobalManager:
         for i in range(1,self.numRobots+1):
             self.goals.append(rospy.Publisher('/robot_'+str(i)+'/path'+str(i),Path,queue_size=10))
             # rospy.Subscriber('/robot_'+str(i)+'/newGoal',Odometry,self.chooseGoal)
-            rospy.Subscriber("/robot_"+str(i)+'/replan',Odometry,self.sameGoal)
+            # rospy.Subscriber("/robot_"+str(i)+'/replan',Odometry,self.sameGoal)
             rospy.Subscriber('/robot_'+str(i)+'/reqedodom',Odometry,self.update_odometry)
             self.odomReqPubs.append(rospy.Publisher('/robot_'+str(i)+'/reqingodom',String,queue_size=10))
             self.stoppers.append(rospy.Publisher('/robot_'+str(i)+'/stopRobot', String, queue_size=10))
@@ -50,7 +50,7 @@ class GlobalManager:
         self.path_pub = rospy.Publisher("/apath", Path, queue_size=0)
         self.cspace_pub = rospy.Publisher("/path_planner/cspace", GridCells, queue_size=10)
         self.cspace_base_pub = rospy.Publisher("/path_planner/basecspace", GridCells, queue_size=10)
-        rospy.Timer(rospy.Duration(120), self.timer_callback)
+        rospy.Timer(rospy.Duration(90), self.timer_callback)
 
         
         # rospy.Subscriber('/initialpose',
@@ -133,8 +133,8 @@ class GlobalManager:
     def chooseGoals(self):
         self.stopRobots([1,2,3,4,5,6])
         self.callUpdateAllPoses()
-        self.cspaced=self.mapforobot()
-        self.publish_cspace(self.baseCspace,self.cspace_base_pub)
+        # self.cspaced=self.mapforobot()
+        # self.publish_cspace(self.baseCspace,self.cspace_base_pub)
         self.publish_cspace()
         robots_to_plan=self.getUnassignedRobots()
         for i in robots_to_plan:
@@ -152,7 +152,7 @@ class GlobalManager:
     
     def chooseGoal(self,robot):
 
-        mapdata=self.mapforobot(robot)
+        mapdata=self.baseCspace#self.mapforobot(robot)
         pos=Point()
         pos.x=self.px[robot-1]
         pos.y=self.py[robot-1]
@@ -283,6 +283,9 @@ class GlobalManager:
         for i in plannedRobots:
             pathstosend[i-1] = self.gridPaths[i-1]
         newPath = PathPlanner.a_star(self.baseCspace,start,goal,otherPaths=self.gridPaths)
+        if newPath == []:
+            rospy.loginfo("No path found for robot "+str(robot))
+            newPath=path
         self.gridPaths[robot-1] = newPath
         path_msg = PathPlanner.path_to_message(self.cspaced, newPath)
         self.pathMessages[robot-1] = path_msg

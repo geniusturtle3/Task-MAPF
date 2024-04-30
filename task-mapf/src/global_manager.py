@@ -138,7 +138,17 @@ class GlobalManager:
             rospy.loginfo("All goals chosen")
             rospy.loginfo(str(self.goalPoints))
             rospy.loginfo(str(self.isPlanned))
-            self.prioritizeRobots()
+            self.replanInitialPaths()
+
+    def replanInitialPaths(self):
+        newmap=PathPlanner.calc_robots(self.map,self.px,self.py)
+        newcspace=PathPlanner.calc_cspace(newmap)
+        self.cspaced=newcspace
+        for robot in range(1,self.numRobots+1):
+            start = [self.px[robot-1], self.py[robot-1]]
+            self.gridPaths[robot-1] = PathPlanner.a_star(start,self.goalPoints[robot][2],self.cspaced)
+            self.pathMessages[robot-1] = PathPlanner.path_to_message(self.cspaced,self.gridPaths[robot-1])
+        self.prioritizeRobots()
 
     def allGoalsChosen(self):
         return all(self.isPlanned)
@@ -160,7 +170,7 @@ class GlobalManager:
             self.path_pub.publish(path_msg)
         self.isPlanned = [False, False, False, False, False, False, False, False]
 
-    def sameGoal(self,msg):
+    def sameGoal(self,msg, publish=True):
         mapdata=self.cspaced
         robot=self.update_odometry(msg)
         pos=Point()
@@ -169,8 +179,11 @@ class GlobalManager:
         start=PathPlanner.world_to_grid(mapdata,pos)
         path=PathPlanner.a_star(mapdata,start,self.goalPoints[robot-1][2],self.gradSpace)
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
-        self.goals[robot-1].publish(path_msg)
         self.path_pub.publish(path_msg)
+        if publish:
+            # self.goals[robot-1].publish(path_msg)
+            pass
+            
 
     def callUpdateAllPoses(self,robot):      
         for i in range(1,self.numRobots+1):

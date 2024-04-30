@@ -346,14 +346,15 @@ class PathPlanner:
     def calc_robots(mapdata: OccupancyGrid, px: list[float], py: list[float], paddingVal: float = 2) -> OccupancyGrid:
         for i in range(len(px)):
             cellCord=PathPlanner.world_to_grid(mapdata,Point(px[i],py[i],0))
-            
+            mapthedata=list(mapdata.data)
             robot_radius_cells = math.ceil(
                 (0.210 * 0.5*paddingVal) / mapdata.info.resolution)
             
-            mapdata.data[PathPlanner.grid_to_index(mapdata,cellCord)]=100
+            mapthedata[PathPlanner.grid_to_index(mapdata,cellCord)]=100
             cellsBlocked=PathPlanner.neighbors_within_dist(mapdata,cellCord,robot_radius_cells)
             for cell in cellsBlocked:
-                mapdata.data[PathPlanner.grid_to_index(mapdata,cell)]=100
+                mapthedata[PathPlanner.grid_to_index(mapdata,cell)]=100
+        mapdata.data=tuple(mapthedata)
         return mapdata
 
 

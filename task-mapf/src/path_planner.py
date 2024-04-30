@@ -70,8 +70,6 @@ class PathPlanner:
         """
         return (i % mapdata.info.width, int(i / mapdata.info.width))
 
-
-
     @staticmethod
     def euclidean_distance(p1: [float, float], p2: [float, float]) -> float:
         """
@@ -110,9 +108,6 @@ class PathPlanner:
             p2 = [path.poses[i+1].pose.position.x, path.poses[i+1].pose.position.y]
             length += PathPlanner.euclidean_distance(p1, p2)
         return length
-
-        
-
 
     @staticmethod
     def grid_to_world(mapdata: OccupancyGrid, p: [int, int]) -> Point:
@@ -547,9 +542,7 @@ class PathPlanner:
             path_msg.poses.append(pose)
 
         return path_msg
-
-
-        
+     
     def plan_path(self, msg):
         """
         Plans a path between the start and goal locations in the requested.
@@ -591,8 +584,10 @@ class PathPlanner:
         return pthmsg
 
     @staticmethod
-    # takes a pose and translates to np array of 4x4 homogenous transformation matrix
     def poseToMatrix(pose:Pose):
+        '''
+        Converts a Pose message to a 4x4 homogenous transformation matrix
+        '''
         quat=pose.orientation
         q1,q2,q3,q0=quat.x,quat.y,quat.z,quat.w
         pos=pose.position
@@ -625,44 +620,9 @@ class PathPlanner:
         self.map = PathPlanner.request_map()
         self.cspaced=self.calc_cspace(self.map, 1.25)
         self.gradSpace=self.calc_gradspace(self.map)
-        # # Create a GridCells message and publish it
-        # cspace = GridCells()
-        # cspace.header.frame_id = "map"
-        # cspace.cell_width = self.cspaced.info.resolution
-        # cspace.cell_height = self.cspaced.info.resolution
-        # cspace.cells = []
-
-        # for i in range(len(self.cspaced.data)):
-        #     if self.cspaced.data[i] == 100:
-        #         # Publish only the inflated cells
-        #         cspace.cells.append(PathPlanner.grid_to_world(
-        #             self.cspaced, (i % self.cspaced.info.width, int(i / self.cspaced.info.width))))
-                
-        # rospy.loginfo("Publishing C-Space")
-        # PathPlanner.cspace_pub.publish(cspace)
-        # print(self.map)
-        # rospy.loginfo(rospy.get_name()+" Hello")
-        # path=self.optimize_path(self.a_star(self.cspaced,(3,3),(11,9)))
-        # print(path)
-        # pathpoints=[]
-        # for point in path:
-        #     print(point)
-        #     pathpoints.append(self.grid_to_world(self.cspaced,point))
-        
-        # path_msg=GridCells()
-        # path_msg.cell_height=self.cspaced.info.resolution
-        # path_msg.cell_width=self.cspaced.info.resolution
-        # path_msg.header.frame_id="map"
-        # path_msg.cells=pathpoints
-        # self.a_star_pub.publish(path_msg)
-        
-        
-
-        # self.a_star_pub()
+       
         rospy.spin()
 
-
-        
 if __name__ == '__main__':
     PathPlanner().run()
 

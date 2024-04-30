@@ -116,7 +116,12 @@ class Lab2:
             # Execute the path        
             self.pure_pursuit(planToDrive, tolerance=tolerance)
             #lost path replanning
-            goal=planToDrive.poses[-1]
+            if not len(planToDrive.poses)==0:
+                goal=planToDrive.poses[-1]
+            else:
+                rospy.loginfo("Robot "+str(self.number)+" no path given")
+                msg=self.prevOdom
+                self.replanPub.publish(msg)
 
             if self.pose_distance((goal.pose.position.x, goal.pose.position.y)) > tolerance * 1.05:
                 #if we fail to reach goal have global manager send another path to same goal

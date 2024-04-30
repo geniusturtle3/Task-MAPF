@@ -182,7 +182,9 @@ class PathPlanner:
         
         if p[0] < 0 or p[0] >= width or p[1] < 0 or p[1] >= height:
             return False
-        val = mapdata.data[PathPlanner.grid_to_index(mapdata, p)]
+        index=PathPlanner.grid_to_index(mapdata,p)
+        
+        val = mapdata.data[index]
         # print(p,val)
         return val < 100 and val != -1         
 
@@ -326,18 +328,24 @@ class PathPlanner:
         return newmapdata
     
     @staticmethod
-    def calc_robots(mapdata: OccupancyGrid, px: list[float], py: list[float], paddingVal: float = 1) -> OccupancyGrid:
+    def calc_robots(mapdata: OccupancyGrid, px: list[float], py: list[float], paddingVal: float = 2, ignoreRobot=-1) -> OccupancyGrid:
+        mapthedata=list(mapdata.data)
         for i in range(len(px)):
-            cellCord=PathPlanner.world_to_grid(mapdata,Point(px[i],py[i],0))
-            mapthedata=list(mapdata.data)
-            robot_radius_cells = math.ceil(
-                (0.178 * 0.5*paddingVal) / mapdata.info.resolution)
-            
-            mapthedata[PathPlanner.grid_to_index(mapdata,cellCord)]=100
-            cellsBlocked=PathPlanner.neighbors_within_dist(mapdata,cellCord,robot_radius_cells)
-            for cell in cellsBlocked:
-                mapthedata[PathPlanner.grid_to_index(mapdata,cell)]=100
-        mapdata.data=tuple(mapthedata)
+            if i!=ignoreRobot-1:
+                cellCord=PathPlanner.world_to_grid(mapdata,Point(px[i],py[i],0))
+                robot_radius_cells = math.ceil(
+                    (0.178 * 0.5*paddingVal) / mapdata.info.resolution)
+                
+                mapthedata[PathPlanner.grid_to_index(mapdata,cellCord)]=100
+                cellsBlocked=PathPlanner.neighbors_within_dist(mapdata,cellCord,robot_radius_cells)
+                for cell in cellsBlocked:
+                    mapthedata[PathPlanner.grid_to_index(mapdata,cell)]=100
+        mapdata.data=tuple(mapthedata)  
+        if not ignoreRobot==-1:
+            cellCord=PathPlanner.world_to_grid(mapdata,Point(px[ignoreRobot-1],py[ignoreRobot-1],0))
+            if not PathPlanner.is_cell_walkable(mapdata,cellCord):
+                rospy.loginfo(f"Robot {ignoreRobot} is not in a walkable cell")     
+       
         return mapdata
 
 
@@ -397,14 +405,17 @@ class PathPlanner:
         #               (start[0], start[1], goal[0], goal[1]))
 
         # Check if start and goal are walkable
-
+        # startindex=PathPlanner.grid_to_index(mapdata,start)
+        # print(start,startindex)
         if (not PathPlanner.is_cell_walkable(mapdata, start)):
             # print(mapdata.data[self.grid_to_index(mapdata,start)])
             rospy.loginfo('start blocked')
+            return []
 
         if (not PathPlanner.is_cell_walkable(mapdata, goal)):
             # print(mapdata.data[self.grid_to_index(mapdata,goal)])
             rospy.loginfo('goal blocked')
+            return []
 
         # Priority queue for the algorithm
         q = PriorityQueue()
@@ -619,7 +630,7 @@ class PathPlanner:
         """
         self.map = PathPlanner.request_map()
         self.cspaced=self.calc_cspace(self.map, 1.25)
-        self.gradSpace=self.calc_gradspace(self.map)
+        # self.gradSpace=self.calc_gradspace(self.map)
        
         rospy.spin()
 

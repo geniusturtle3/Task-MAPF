@@ -31,14 +31,14 @@ class GlobalManager:
         rospy.init_node("global_manager")
 
         self.odomReqPubs: list[rospy.Publisher]=[]
-        self.goals: list[rospy.Publisher]=[]
+        self.pathPubs: list[rospy.Publisher]=[]
         self.stoppers: list[rospy.Publisher]=[]
-        self.numRobots=6
+        self.numRobots=9
         self.priorityMultiplier = 6
         self.priorityOffset = 5*self.priorityMultiplier
         
         for i in range(1,self.numRobots+1):
-            self.goals.append(rospy.Publisher('/robot_'+str(i)+'/path'+str(i),Path,queue_size=10))
+            self.pathPubs.append(rospy.Publisher('/robot_'+str(i)+'/path'+str(i),Path,queue_size=10))
             # rospy.Subscriber('/robot_'+str(i)+'/newGoal',Odometry,self.chooseGoal)
             # rospy.Subscriber("/robot_"+str(i)+'/replan',Odometry,self.sameGoal)
             rospy.Subscriber('/robot_'+str(i)+'/reqedodom',Odometry,self.update_odometry)
@@ -56,14 +56,15 @@ class GlobalManager:
         # rospy.Subscriber('/initialpose',
         #                  PoseWithCovarianceStamped, self.chooseGoals)
 
-        # self.goals=[self.pathPub1,self.pathPub2,self.pathPub3,self.pathPub4,self.pathPub5,self.pathPub6,self.pathPub7,self.pathPub8]
+        # self.pathPubs=[self.pathPub1,self.pathPub2,self.pathPub3,self.pathPub4,self.pathPub5,self.pathPub6,self.pathPub7,self.pathPub8]
 
-        self.px=[0,0,0,0,0,0,0,0]
-        self.py=[0,0,0,0,0,0,0,0]
-        self.gridPaths = [[], [], [], [], [], [], [], []]
-        self.pathMessages = [None, None, None, None, None, None, None, None]
+        self.px=[0 for i in range(self.numRobots)]
+        self.py=[0 for i in range(self.numRobots)]
+        self.ptheta=[0 for i in range(self.numRobots)]
+        self.gridPaths = [[], [], [], [], [], [], [], [], [], [], [], []]
+        self.pathMessages = [None, None, None, None, None, None, None, None, None, None, None, None]
         self.goalPoints={}
-        self.isPlanned = [False, False, False, False, False, False, False, False]
+        self.isPlanned = [False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]
         self.unplannedRobots = PriorityQueue()
 
         for i in range(1,self.numRobots+1):
@@ -73,6 +74,13 @@ class GlobalManager:
         self.cspaced=PathPlanner.calc_cspace(self.map, 1.5)
         self.baseCspace=deepcopy(self.cspaced)
         self.publish_cspace(self.baseCspace,self.cspace_base_pub)
+        self.opencells=[]
+        for i in range(len(self.baseCspace.data)):
+            pnt=self.baseCspace.data[i]
+            if pnt<100 and pnt>-1:
+                self.opencells.append(i)
+        rospy.sleep(3)
+        rospy.loginfo("Done initializing")
         self.chooseGoals()
         rospy.Timer(rospy.Duration(150), self.timer_callback)
         
@@ -116,27 +124,33 @@ class GlobalManager:
         This method is a callback bound to a Subscriber.
         :param msg [Odometry] The current odometry information.
         """
-        # print("updating odom")
-        # print(msg.header.frame_id)
-        frame_id=msg.header.frame_id
-        # rospy.loginfo(str.split(str.split(frame_id,'/')[0],'_')[1])
-        number=int(str.split(str.split(frame_id,'/')[0],'_')[1])
-        self.odomHeader=msg.header
-        self.odomPoint=msg.pose.pose
-        self.px[number-1] = msg.pose.pose.position.x
-        self.py[number-1] = msg.pose.pose.position.y
-        self.quat_orig = msg.pose.pose.orientation
-        (roll, pitch, yaw) = euler_from_quaternion([self.quat_orig.x, self.quat_orig.y, self.quat_orig.z, self.quat_orig.w])
-        self.ptheta = yaw
+        number = 0
+        try:
+            # print("updating odom")
+            # print(msg.header.frame_id)
+            frame_id=msg.header.frame_id
+            # rospy.loginfo(str.split(str.split(frame_id,'/')[0],'_')[1])
+            number=int(str.split(str.split(frame_id,'/')[0],'_')[1])
+            self.odomHeader=msg.header
+            self.odomPoint=msg.pose.pose
+            self.px[number-1] = msg.pose.pose.position.x
+            self.py[number-1] = msg.pose.pose.position.y
+            self.quat_orig = msg.pose.pose.orientation
+            (roll, pitch, yaw) = euler_from_quaternion([self.quat_orig.x, self.quat_orig.y, self.quat_orig.z, self.quat_orig.w])
+            self.ptheta[number-1] = yaw
+        except:
+            pass
         return number
 
     def chooseGoals(self):
-        self.stopRobots([1,2,3,4,5,6])
+        self.stopRobots([i for i in range(1,self.numRobots+1)])
         self.callUpdateAllPoses()
+        # rospy.loginfo("Pthetas are "+str(self.ptheta))
         # self.cspaced=self.mapforobot()
         # self.publish_cspace(self.baseCspace,self.cspace_base_pub)
-        self.publish_cspace()
+        # self.publish_cspace()
         robots_to_plan=self.getUnassignedRobots()
+        
         for i in robots_to_plan:
             self.chooseGoal(i)
         for i in robots_to_plan:
@@ -154,28 +168,18 @@ class GlobalManager:
         pos.x=self.px[robot-1]
         pos.y=self.py[robot-1]
         start=PathPlanner.world_to_grid(mapdata,pos)
-        opencells=[]
-        for i in range(len(mapdata.data)):
-            pnt=mapdata.data[i]
-            if pnt<100 and pnt>-1:
-                opencells.append(i)
+        
         # print(opencells)
         goalPoint=[]
         while len(goalPoint)==0:
-            tempPoint=random.choice(opencells)
+            tempPoint=random.choice(self.opencells)
             gridPoint=PathPlanner.index_to_grid(mapdata,tempPoint)
-            path=PathPlanner.a_star(mapdata,start,gridPoint)
+            path=PathPlanner.a_star(mapdata,start,gridPoint,initialHeading=self.ptheta[robot-1])
             if len(path)>0:
                 goalPoint=gridPoint
                 goalTime = random.randint(30,100)
                 self.goalPoints[robot] = (robot, goalTime, goalPoint) 
-            # else:
-            #     path=PathPlanner.a_star(self.baseCspace,start,gridPoint)
-            #     if len(path)>0:
-            #         rospy.loginfo("Path found in base cspace Robot "+str(robot))
-            #         goalPoint=gridPoint
-            #         goalTime = random.randint(50,200)+6.9
-            #         self.goalPoints[robot] = (robot, goalTime, goalPoint)
+            
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.gridPaths[robot-1] = path
         self.pathMessages[robot-1] = path_msg
@@ -203,7 +207,7 @@ class GlobalManager:
     def releaseRobots(self, plannedRobots):
         for robot in plannedRobots:
             path_msg = self.pathMessages[robot-1]
-            self.goals[robot-1].publish(path_msg)
+            self.pathPubs[robot-1].publish(path_msg)
             self.path_pub.publish(path_msg)
         rospy.loginfo("All goals chosen")
         rospy.loginfo(str(self.goalPoints))
@@ -221,7 +225,7 @@ class GlobalManager:
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.path_pub.publish(path_msg)
         if publish:
-            self.goals[robot-1].publish(path_msg)
+            self.pathPubs[robot-1].publish(path_msg)
             
     def stopRobots(self,robots):
         for i in robots:
@@ -237,6 +241,7 @@ class GlobalManager:
             msg.data="requesting_"+str(i)
             self.odomReqPubs[i-1].publish(msg)
             rospy.wait_for_message('/robot_'+str(i)+'/reqedodom',Odometry)
+            # rospy.loginfo("received_"+str(i))
             # rospy.loginfo(str((self.px[i-1],self.py[i-1])))
             # rospy.loginfo("received_"+str(i))
     
@@ -280,10 +285,10 @@ class GlobalManager:
         pos.x=self.px[robot-1]
         pos.y=self.py[robot-1]
         start=PathPlanner.world_to_grid(self.baseCspace,pos)
-        pathstosend =[[], [], [], [], [], [], [], []]
+        pathstosend =[[], [], [], [], [], [], [], [], [], [], [], []]
         for i in plannedRobots:
             pathstosend[i-1] = self.gridPaths[i-1]
-        newPath = PathPlanner.a_star(self.baseCspace,start,goal,otherPaths=pathstosend)
+        newPath = PathPlanner.a_star(self.baseCspace,start,goal,otherPaths=pathstosend,initialHeading=self.ptheta[robot-1])
         if newPath == []:
             rospy.loginfo("No path found for robot "+str(robot))
             newPath=path

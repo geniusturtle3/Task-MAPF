@@ -11,11 +11,11 @@ import math
 class ScoreTracker:
     def __init__(self) -> None:
         rospy.init_node("score_tracker")
-        self.numRobots = 6
+        self.numRobots = 9
         self.score = 0
         self.goals = {}
-        self.px=[0,0,0,0,0,0,0,0]
-        self.py=[0,0,0,0,0,0,0,0]
+        self.px=[0 for i in range(self.numRobots)]
+        self.py=[0 for i in range(self.numRobots)]
 
         for i in range(1, self.numRobots+1):
             rospy.Subscriber('/robot_'+str(i)+'/robotGoal', Float64MultiArray, self.goalChosen)
@@ -41,18 +41,22 @@ class ScoreTracker:
         This method is a callback bound to a Subscriber.
         :param msg [Odometry] The current odometry information.
         """
-        # print("updating odom")
-        # print(msg.header.frame_id)
-        frame_id=msg.header.frame_id
-        # rospy.loginfo(str.split(str.split(frame_id,'/')[0],'_')[1])
-        number=int(str.split(str.split(frame_id,'/')[0],'_')[1])
-        self.odomHeader=msg.header
-        self.odomPoint=msg.pose.pose
-        self.px[number-1] = msg.pose.pose.position.x
-        self.py[number-1] = msg.pose.pose.position.y
-        self.quat_orig = msg.pose.pose.orientation
-        (roll, pitch, yaw) = euler_from_quaternion([self.quat_orig.x, self.quat_orig.y, self.quat_orig.z, self.quat_orig.w])
-        self.ptheta = yaw
+        number=0
+        try:
+            # print("updating odom")
+            # print(msg.header.frame_id)
+            frame_id=msg.header.frame_id
+            # rospy.loginfo(str.split(str.split(frame_id,'/')[0],'_')[1])
+            number=int(str.split(str.split(frame_id,'/')[0],'_')[1])
+            self.odomHeader=msg.header
+            self.odomPoint=msg.pose.pose
+            self.px[number-1] = msg.pose.pose.position.x
+            self.py[number-1] = msg.pose.pose.position.y
+            self.quat_orig = msg.pose.pose.orientation
+            (roll, pitch, yaw) = euler_from_quaternion([self.quat_orig.x, self.quat_orig.y, self.quat_orig.z, self.quat_orig.w])
+            self.ptheta = yaw
+        except:
+            pass
         return number
     
     def robotAtGoal(self, robot):

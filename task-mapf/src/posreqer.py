@@ -44,7 +44,7 @@ class PosReqer:
         self.prevOdom=data
         
     def getOdom(self,msg):
-        rospy.sleep(.01)
+        # rospy.sleep(.01)
         self.reqedOdomPub.publish(self.prevOdom)
         return self.prevOdom
     

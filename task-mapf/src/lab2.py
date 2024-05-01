@@ -50,9 +50,9 @@ class Lab2:
 
         self.useOdom = True
         # a value of 0.45 meters seem to smooth out things while keeping the robot fairly on track
-        self.indexLookahead = 12  # 6 cells lookahead
-        self.lookaheadDistance = self.indexLookahead*0.015  # meters
-        self.maximumVelocity = 0.4  # meters per second
+        self.indexLookahead = 6  # 6 cells lookahead
+        self.lookaheadDistance = self.indexLookahead*0.05  # meters
+        self.maximumVelocity = 0.6  # meters per second
         self.maximumAngVelocity = 5.5  # rad per second
         self.turnK=1.97
         self.maximumAngAccel= math.pi * 0.8
@@ -267,7 +267,7 @@ class Lab2:
                 lookahead = min(120, len(path.poses)-1)
 
                 isDone = self.pose_distance(
-                    (path.poses[lookahead].pose.position.x, path.poses[lookahead].pose.position.y)) < tolerance
+                    (path.poses[lookahead].pose.position.x, path.poses[lookahead].pose.position.y)) < 2*tolerance
             if not isDone:  # and earlyExit:
                 isDone = self.pose_distance(
                     (path.poses[-1].pose.position.x, path.poses[-1].pose.position.y)) < tolerance

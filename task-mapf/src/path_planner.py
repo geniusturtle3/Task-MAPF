@@ -396,7 +396,7 @@ class PathPlanner:
         return newmapdata
 
     @staticmethod
-    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid=None,otherPaths=None) -> list[tuple[int, int]]:
+    def a_star(mapdata: OccupancyGrid, start: tuple[int, int], goal: tuple[int, int], gradSpace: OccupancyGrid=None,otherPaths=None,initialHeading=None) -> list[tuple[int, int]]:
         """
         Calculates the Optimal path using the A* algorithm.
         Publishes the list of cells that were added to the original map.
@@ -448,11 +448,13 @@ class PathPlanner:
             element = q.get()
             cords = element[0]
             prev = element[1]
+            g = element[2]  # cost sof far at this element
+            ts = element[3] # time step
             if cords == start:
                 prev = cords
             heading = math.atan2(cords[1]-prev[1], cords[0]-prev[0])
-            g = element[2]  # cost sof far at this element
-            ts = element[3] # time step
+            if initialHeading!=None and ts == 0:
+                heading=initialHeading
             explored[(cords[0],cords[1])] = element
             exppoints.append(cords)
 
@@ -470,12 +472,22 @@ class PathPlanner:
                     gfactor = 1.4
                 else:  # Cardinal Neighbors
                     gfactor = 1
-
-                newHeading = math.atan2(neighbor[1]-cords[1], neighbor[0]-cords[0])
-                turnAngle = math.fmod(math.fmod(newHeading-heading, math.pi*2)+math.pi*2, math.pi*2)
-                turningFactor = 180/math.pi*turnAngle*.01
-                cspaceFactor = 0
                 skip=False
+                turningFactor = 0
+                newHeading = math.atan2(neighbor[1]-cords[1], neighbor[0]-cords[0])
+                turnAngle =newHeading-heading
+                if turnAngle<-math.pi:
+                    turnAngle+=2*math.pi
+                elif turnAngle>math.pi:
+                    turnAngle-=2*math.pi
+
+                turningFactor = math.degrees(turnAngle)*.01#np.rad2deg(np.unwrap([turnAngle]))[0]*.01
+                
+                if initialHeading!=None and ts==0:
+                    if abs(turnAngle)>math.pi/3:
+                        skip=True
+                cspaceFactor = 0
+                
                 if checkFat:
                     dis = gradSpace.data[PathPlanner.grid_to_index(gradSpace, neighbor)]
                     
@@ -492,7 +504,7 @@ class PathPlanner:
                         else:
                             pathpoint = [math.inf,math.inf]
                         dis=PathPlanner.euclidean_distance(neighbor,pathpoint) 
-                        if dis < robot_radius_cells*4:
+                        if dis < robot_radius_cells*5:
                             skip=True
                             break                  
 

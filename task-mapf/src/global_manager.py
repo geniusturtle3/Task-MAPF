@@ -64,7 +64,7 @@ class GlobalManager:
         self.gridPaths = [[], [], [], [], [], [], [], [], [], [], [], []]
         self.pathMessages = [None, None, None, None, None, None, None, None, None, None, None, None]
         self.goalPoints={}
-        self.isPlanned = [False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]
+        self.isPlanned = [False for i in range(self.numRobots)]
         self.unplannedRobots = PriorityQueue()
 
         for i in range(1,self.numRobots+1):
@@ -155,7 +155,7 @@ class GlobalManager:
             self.chooseGoal(i)
         for i in robots_to_plan:
             sending=Float64MultiArray()
-            goalpoint=self.goalPoints[i]
+            goalpoint=PathPlanner.grid_to_world(self.baseCspace,self.goalPoints[i])
             sending.data = [goalpoint[0], goalpoint[1], goalpoint[2][0], goalpoint[2][1]]
             self.goalPublisher.publish(sending)
         self.prioritizeRobots()
@@ -179,13 +179,13 @@ class GlobalManager:
                 goalPoint=gridPoint
                 goalTime = random.randint(30,100)
                 self.goalPoints[robot] = (robot, goalTime, goalPoint) 
-            
+        rospy.loginfo("Done choosing goal for robot "+str(robot))
         path_msg=PathPlanner.path_to_message(self.cspaced,path)
         self.gridPaths[robot-1] = path
         self.pathMessages[robot-1] = path_msg
         self.isPlanned[robot-1] = True
         
-        rospy.loginfo("Done choosing goal for robot "+str(robot))
+        
 
 
 
@@ -212,7 +212,7 @@ class GlobalManager:
         rospy.loginfo("All goals chosen")
         rospy.loginfo(str(self.goalPoints))
         rospy.loginfo(str(self.isPlanned))
-        self.isPlanned = [False, False, False, False, False, False, False, False]
+        self.isPlanned = [False for i in range(self.numRobots)]
 
     def sameGoal(self,msg, publish=True):
         mapdata=self.cspaced

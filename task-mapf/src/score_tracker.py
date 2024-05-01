@@ -28,7 +28,7 @@ class ScoreTracker:
 
     def updateScore(self, event, robot, duration):
         d = self.robotAtGoal(robot)
-        if d < 0.4:
+        if d < 0.5:
             self.score += ((10 / duration) + d)
         else:
             rospy.loginfo("Robot " + str(robot) + " did not reach goal in time.")

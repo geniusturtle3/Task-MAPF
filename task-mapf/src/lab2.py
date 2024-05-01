@@ -270,7 +270,7 @@ class Lab2:
                     (path.poses[lookahead].pose.position.x, path.poses[lookahead].pose.position.y)) < 2*tolerance
             if not isDone:  # and earlyExit:
                 isDone = self.pose_distance(
-                    (path.poses[-1].pose.position.x, path.poses[-1].pose.position.y)) < tolerance
+                    (path.poses[-1].pose.position.x, path.poses[-1].pose.position.y)) < .6*tolerance
             # elif not isDone:
             #     # Tells the system that the PP loop is done.
             #     isDone = distToWaypoint < tolerance and chosenWaypoint == path.poses[-1]

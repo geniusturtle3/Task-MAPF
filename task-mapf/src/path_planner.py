@@ -265,7 +265,7 @@ class PathPlanner:
         return map
 
     @staticmethod
-    def calc_cspace(mapdata: OccupancyGrid, paddingVal: float = 1) -> OccupancyGrid:
+    def calc_cspace(mapdata: OccupancyGrid, paddingVal: float = 1.2) -> OccupancyGrid:
         """
         Calculates the C-Space, i.e., makes the obstacles in the map thicker.
         Publishes the list of cells that were added to the original map.
@@ -422,7 +422,7 @@ class PathPlanner:
             while not PathPlanner.is_cell_walkable(mapdata, newstart):
                 newstart=PathPlanner.neighbors_within_dist(mapdata,start,i)[0]
                 i+=1
-                if i>robot_radius_cells:
+                if i>robot_radius_cells*1.5:
                     rospy.loginfo('no start')
                     return []
 
@@ -436,11 +436,8 @@ class PathPlanner:
         # element ((Cords),(Prev),g)
 
         # dictionary of all the explored points keyed by their coordinates tuple
-        # TODO: Replace with an array based on the index, and store their previous point
         explored = {}
         exppoints = []
-        wvpoint = []
-        
         checkPaths=otherPaths!=None
         checkFat=gradSpace!=None
         q.put((start, None, 0,0), PathPlanner.euclidean_distance(start, goal))
@@ -504,7 +501,7 @@ class PathPlanner:
                         else:
                             pathpoint = [math.inf,math.inf]
                         dis=PathPlanner.euclidean_distance(neighbor,pathpoint) 
-                        if dis < robot_radius_cells*5:
+                        if dis < robot_radius_cells*3.5:
                             skip=True
                             break                  
 

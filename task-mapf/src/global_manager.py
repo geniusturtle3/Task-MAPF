@@ -50,7 +50,7 @@ class GlobalManager:
         self.path_pub = rospy.Publisher("/apath", Path, queue_size=0)
         self.cspace_pub = rospy.Publisher("/path_planner/cspace", GridCells, queue_size=10)
         self.cspace_base_pub = rospy.Publisher("/path_planner/basecspace", GridCells, queue_size=10)
-        rospy.Timer(rospy.Duration(90), self.timer_callback)
+        rospy.Timer(rospy.Duration(40), self.timer_callback)
 
         
         # rospy.Subscriber('/initialpose',
@@ -139,9 +139,6 @@ class GlobalManager:
         robots_to_plan=self.getUnassignedRobots()
         for i in robots_to_plan:
             self.chooseGoal(i)
-        rospy.loginfo("All goals chosen")
-        rospy.loginfo(str(self.goalPoints))
-        rospy.loginfo(str(self.isPlanned))
         for i in robots_to_plan:
             sending=Float64MultiArray()
             goalpoint=self.goalPoints[i]
@@ -170,7 +167,7 @@ class GlobalManager:
             path=PathPlanner.a_star(mapdata,start,gridPoint)
             if len(path)>0:
                 goalPoint=gridPoint
-                goalTime = random.randint(30,100)+6.9
+                goalTime = random.randint(30,100)
                 self.goalPoints[robot] = (robot, goalTime, goalPoint) 
             # else:
             #     path=PathPlanner.a_star(self.baseCspace,start,gridPoint)
@@ -195,8 +192,9 @@ class GlobalManager:
         for key, value in self.goalPoints.items():
             path = self.pathMessages[key-1]
             path_length = PathPlanner.path_length(self.cspaced,path)
-            priority = self.priorityMultiplier*path_length
-            if priority > value[1]:
+            estimate = self.priorityMultiplier*path_length
+            priority = value[1]
+            if estimate > value[1]:
                 priority += self.priorityOffset
             self.unplannedRobots.put(value, priority)
         
@@ -207,6 +205,9 @@ class GlobalManager:
             path_msg = self.pathMessages[robot-1]
             self.goals[robot-1].publish(path_msg)
             self.path_pub.publish(path_msg)
+        rospy.loginfo("All goals chosen")
+        rospy.loginfo(str(self.goalPoints))
+        rospy.loginfo(str(self.isPlanned))
         self.isPlanned = [False, False, False, False, False, False, False, False]
 
     def sameGoal(self,msg, publish=True):
@@ -282,7 +283,7 @@ class GlobalManager:
         pathstosend =[[], [], [], [], [], [], [], []]
         for i in plannedRobots:
             pathstosend[i-1] = self.gridPaths[i-1]
-        newPath = PathPlanner.a_star(self.baseCspace,start,goal,otherPaths=self.gridPaths)
+        newPath = PathPlanner.a_star(self.baseCspace,start,goal,otherPaths=pathstosend)
         if newPath == []:
             rospy.loginfo("No path found for robot "+str(robot))
             newPath=path
@@ -307,6 +308,7 @@ class GlobalManager:
             #     path_msg = PathPlanner.path_to_message(self.cspaced, self.gridPaths[currentBot-1])
             #     self.pathMessages[currentBot-1] = path_msg
             plannedRobots.append(currentBot)
+        
         return plannedRobots
     
     def getUnassignedRobots(self):

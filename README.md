@@ -1,11 +1,8 @@
-# Hello and welcome to RBE 3002 B 2022
+# Task MAPF 
 
-## Having Issues with Your Robot?
-Add a comment corresponding with your robot in [this spreadsheet](https://docs.google.com/spreadsheets/d/1kZ19K1iCRrBCk3pxAp74G3OKL1qjZJY5CHfOHSK4x84/edit?usp=sharing).
+Simulation of task prioritized multiagent pathfinding simulation using turtlebot3s in gazebo
 
-## Having Generic ROS/Turtlebot Issues?
-See the [**Troubleshooting Guide**](https://github.com/RBE300X-Lab/RBE3002_info/blob/main/troubleshooting.md) for assistance.
+Build using ROS Noetic 
 
-If you can't remember how to connect to your robot see the [**TurtleBot Netowork Configuration Guide**](https://github.com/RBE300X-Lab/RBE3002_info/blob/main/turtlebot_network_config.md).
 
-GL;HF --JJ, KS, SM
+to launch roslaunch task-mapf multi_robot_simulation.launch

@@ -34,7 +34,7 @@ class GlobalManager:
         self.goals: list[rospy.Publisher]=[]
         self.stoppers: list[rospy.Publisher]=[]
         self.numRobots=6
-        self.priorityMultiplier = 50
+        self.priorityMultiplier = 6
         self.priorityOffset = 5*self.priorityMultiplier
         
         for i in range(1,self.numRobots+1):
@@ -170,7 +170,7 @@ class GlobalManager:
             path=PathPlanner.a_star(mapdata,start,gridPoint)
             if len(path)>0:
                 goalPoint=gridPoint
-                goalTime = rospy.get_time()+random.randint(50,200)+6.9
+                goalTime = random.randint(30,100)+6.9
                 self.goalPoints[robot] = (robot, goalTime, goalPoint) 
             # else:
             #     path=PathPlanner.a_star(self.baseCspace,start,gridPoint)

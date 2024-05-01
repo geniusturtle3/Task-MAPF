@@ -22,14 +22,16 @@ class ScoreTracker:
             rospy.Subscriber('/robot_'+str(i)+'/reqedodom', Odometry,self.update_odometry)
 
     def goalChosen(self, msg):
-        self.goals[msg[0]] = [msg[1], [msg[2], msg[3]]]
-        rospy.Timer(rospy.Duration(msg[1]), callback=lambda event, id=msg[0], duration=msg[1]: self.updateScore(event, id, duration))
+        data = msg.data
+        self.goals[data[0]] = [data[1], [data[2], data[3]]]
+        rospy.Timer(rospy.Duration(data[1]), callback=lambda event, id=data[0], duration=data[1]: self.updateScore(event, id, duration), oneshot=True)
 
     def updateScore(self, event, robot, duration):
         d = self.robotAtGoal(robot)
         if d < 0.4:
             self.score += ((10 / duration) + d)
         else:
+            rospy.loginfo("Robot " + str(robot) + " did not reach goal in time.")
             self.score -= ((10 / duration) + d)
         rospy.loginfo("Score: " + str(self.score))
 
@@ -54,7 +56,7 @@ class ScoreTracker:
         return number
     
     def robotAtGoal(self, robot):
-        curLocation = [self.px[robot-1], self.py[robot-1]]
+        curLocation = [self.px[int(robot-1)], self.py[int(robot-1)]]
         goalLocation = self.goals[robot][1]
         return math.dist(curLocation, goalLocation)
     

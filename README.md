@@ -2,7 +2,6 @@
 
 Simulation of task prioritized multiagent pathfinding simulation using turtlebot3s in gazebo
 
-Build using ROS Noetic 
+Build using ROS Noetic. Make sure you've done the standard ROS prep (catkin_make, chmod on files in the src folder, correct bash file). 
 
-
-to launch roslaunch task-mapf multi_robot_simulation.launch
+To launch roslaunch task-mapf multi_robot_simulation.launch

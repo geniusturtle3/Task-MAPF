@@ -156,7 +156,7 @@ class GlobalManager:
         for i in robots_to_plan:
             sending=Float64MultiArray()
             goalpoint=PathPlanner.grid_to_world(self.baseCspace,self.goalPoints[i])
-            sending.data = [goalpoint[0], goalpoint[1], goalpoint[2][0], goalpoint[2][1]]
+            sending.data = [i, self.goalPoints[i][1], goalpoint.x[0], goalpoint.y[0]]
             self.goalPublisher.publish(sending)
         self.prioritizeRobots()
         
